@@ -86,7 +86,7 @@ When you install with `--antigravity=yes`, the preset depends on other providers
 
 ### antigravity-mixed-both (Kimi + OpenAI + Antigravity)
 - **Orchestrator**: Kimi k2p5
-- **Oracle**: GPT-5.2-codex
+- **Oracle**: GPT-5.3-codex
 - **Explorer/Librarian/Designer/Fixer**: Gemini 3 Flash (Antigravity)
 
 ### antigravity-mixed-kimi (Kimi + Antigravity)
@@ -96,7 +96,7 @@ When you install with `--antigravity=yes`, the preset depends on other providers
 
 ### antigravity-mixed-openai (OpenAI + Antigravity)
 - **Orchestrator**: Gemini 3 Flash (Antigravity)
-- **Oracle**: GPT-5.2-codex
+- **Oracle**: GPT-5.3-codex
 - **Explorer/Librarian/Designer/Fixer**: Gemini 3 Flash (Antigravity)
 
 ### antigravity (Pure Antigravity)
@@ -120,7 +120,7 @@ Edit `~/.config/opencode/oh-my-opencode-slim.json` (or `.jsonc`) and add the Ant
         "mcps": ["websearch"]
       },
       "oracle": {
-        "model": "openai/gpt-5.2-codex",
+        "model": "openai/gpt-5.3-codex",
         "variant": "high",
         "skills": [],
         "mcps": []

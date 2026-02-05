@@ -48,7 +48,7 @@ describe('providers', () => {
     expect(agents.orchestrator.model).toBe('kimi-for-coding/k2p5');
     expect(agents.orchestrator.variant).toBeUndefined();
     // Oracle uses OpenAI when both kimi and openai are enabled
-    expect(agents.oracle.model).toBe('openai/gpt-5.2-codex');
+    expect(agents.oracle.model).toBe('openai/gpt-5.3-codex');
     expect(agents.oracle.variant).toBe('high');
     // Should NOT include other presets
     expect((config.presets as any).openai).toBeUndefined();
@@ -214,7 +214,7 @@ describe('providers', () => {
       expect(agents.orchestrator.model).toBe('kimi-for-coding/k2p5');
 
       // Oracle should use OpenAI
-      expect(agents.oracle.model).toBe('openai/gpt-5.2-codex');
+      expect(agents.oracle.model).toBe('openai/gpt-5.3-codex');
       expect(agents.oracle.variant).toBe('high');
 
       // Others should use Antigravity Flash
@@ -277,7 +277,7 @@ describe('providers', () => {
       );
 
       // Oracle should use OpenAI
-      expect(agents.oracle.model).toBe('openai/gpt-5.2-codex');
+      expect(agents.oracle.model).toBe('openai/gpt-5.3-codex');
       expect(agents.oracle.variant).toBe('high');
 
       // Others should use Antigravity Flash
@@ -338,7 +338,7 @@ describe('providers', () => {
         installCustomSkills: false,
       });
 
-      expect((preset.oracle as any).model).toBe('openai/gpt-5.2-codex');
+      expect((preset.oracle as any).model).toBe('openai/gpt-5.3-codex');
       expect((preset.oracle as any).variant).toBe('high');
     });
 
