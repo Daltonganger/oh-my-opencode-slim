@@ -22,7 +22,7 @@ export type AgentName = (typeof ALL_AGENT_NAMES)[number];
 // Default models for each agent
 export const DEFAULT_MODELS: Record<AgentName, string> = {
   orchestrator: 'kimi-for-coding/k2p5',
-  oracle: 'openai/gpt-5.2-codex',
+  oracle: 'openai/gpt-5.3-codex',
   librarian: 'openai/gpt-5.1-codex-mini',
   explorer: 'openai/gpt-5.1-codex-mini',
   designer: 'kimi-for-coding/k2p5',

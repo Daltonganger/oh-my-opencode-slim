@@ -13,8 +13,8 @@ export const MODEL_MAPPINGS = {
     fixer: { model: 'kimi-for-coding/k2p5', variant: 'low' },
   },
   openai: {
-    orchestrator: { model: 'openai/gpt-5.2-codex' },
-    oracle: { model: 'openai/gpt-5.2-codex', variant: 'high' },
+    orchestrator: { model: 'openai/gpt-5.3-codex' },
+    oracle: { model: 'openai/gpt-5.3-codex', variant: 'high' },
     librarian: { model: 'openai/gpt-5.1-codex-mini', variant: 'low' },
     explorer: { model: 'openai/gpt-5.1-codex-mini', variant: 'low' },
     designer: { model: 'openai/gpt-5.1-codex-mini', variant: 'medium' },
