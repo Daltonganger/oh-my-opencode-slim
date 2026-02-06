@@ -24,8 +24,8 @@ export const MODEL_MAPPINGS = {
     fixer: { model: 'kimi-for-coding/k2p5', variant: 'low' },
   },
   openai: {
-    orchestrator: { model: 'openai/gpt-5.2-codex' },
-    oracle: { model: 'openai/gpt-5.2-codex', variant: 'high' },
+    orchestrator: { model: 'openai/gpt-5.3-codex' },
+    oracle: { model: 'openai/gpt-5.3-codex', variant: 'high' },
     librarian: { model: 'openai/gpt-5.1-codex-mini', variant: 'low' },
     explorer: { model: 'openai/gpt-5.1-codex-mini', variant: 'low' },
     designer: { model: 'openai/gpt-5.1-codex-mini', variant: 'medium' },
@@ -131,12 +131,22 @@ export function generateAntigravityMixedPreset(
     model: 'google/antigravity-gemini-3-flash',
   };
 
-  // Orchestrator: Kimi if hasKimi, else keep existing if exists, else antigravity
+  const chutesPrimary =
+    config.selectedChutesPrimaryModel ??
+    MODEL_MAPPINGS.chutes.orchestrator.model;
+  const chutesSupport =
+    config.selectedChutesSecondaryModel ?? MODEL_MAPPINGS.chutes.explorer.model;
+
+  // Orchestrator: Kimi if hasKimi, else Chutes Kimi if enabled, else antigravity
   if (config.hasKimi) {
     result.orchestrator = createAgentConfig(
       'orchestrator',
       MODEL_MAPPINGS.kimi.orchestrator,
     );
+  } else if (config.hasChutes) {
+    result.orchestrator = createAgentConfig('orchestrator', {
+      model: chutesPrimary,
+    });
   } else if (!result.orchestrator) {
     result.orchestrator = createAgentConfig(
       'orchestrator',
@@ -154,23 +164,50 @@ export function generateAntigravityMixedPreset(
     );
   }
 
-  // Explorer, Librarian, Designer, Fixer: Always use Antigravity Flash
+  // Explorer stays flash-first for speed.
   result.explorer = createAgentConfig('explorer', {
     ...antigravityFlash,
     variant: 'low',
   });
-  result.librarian = createAgentConfig('librarian', {
-    ...antigravityFlash,
-    variant: 'low',
-  });
-  result.designer = createAgentConfig('designer', {
-    ...antigravityFlash,
-    variant: 'medium',
-  });
-  result.fixer = createAgentConfig('fixer', {
-    ...antigravityFlash,
-    variant: 'low',
-  });
+
+  // Librarian/Designer prefer Kimi-K2.5 via Chutes when available.
+  if (config.hasChutes) {
+    result.librarian = createAgentConfig('librarian', {
+      model: chutesSupport,
+      variant: 'low',
+    });
+    result.designer = createAgentConfig('designer', {
+      model: chutesPrimary,
+      variant: 'medium',
+    });
+  } else {
+    result.librarian = createAgentConfig('librarian', {
+      ...antigravityFlash,
+      variant: 'low',
+    });
+    result.designer = createAgentConfig('designer', {
+      ...antigravityFlash,
+      variant: 'medium',
+    });
+  }
+
+  // Fixer prefers OpenAI codex when available.
+  if (config.hasOpenAI) {
+    result.fixer = createAgentConfig('fixer', {
+      ...MODEL_MAPPINGS.openai.oracle,
+      variant: 'low',
+    });
+  } else if (config.hasChutes) {
+    result.fixer = createAgentConfig('fixer', {
+      model: chutesSupport,
+      variant: 'low',
+    });
+  } else {
+    result.fixer = createAgentConfig('fixer', {
+      ...antigravityFlash,
+      variant: 'low',
+    });
+  }
 
   return result;
 }
