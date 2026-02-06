@@ -103,6 +103,28 @@ describe('providers', () => {
     expect(agents.fixer.model).toBe('chutes/minimax-m2.1');
   });
 
+  test('generateLiteConfig generates anthropic preset when only anthropic selected', () => {
+    const config = generateLiteConfig({
+      hasAntigravity: false,
+      hasKimi: false,
+      hasOpenAI: false,
+      hasAnthropic: true,
+      hasCopilot: false,
+      hasZaiPlan: false,
+      hasChutes: false,
+      hasOpencodeZen: false,
+      hasTmux: false,
+      installSkills: false,
+      installCustomSkills: false,
+    });
+
+    expect(config.preset).toBe('anthropic');
+    const agents = (config.presets as any).anthropic;
+    expect(agents.orchestrator.model).toBe('anthropic/claude-opus-4-6');
+    expect(agents.oracle.model).toBe('anthropic/claude-opus-4-6');
+    expect(agents.explorer.model).toBe('anthropic/claude-haiku-4-5');
+  });
+
   test('generateLiteConfig keeps mixed openai/antigravity primary models when chutes is also enabled', () => {
     const config = generateLiteConfig({
       hasAntigravity: true,

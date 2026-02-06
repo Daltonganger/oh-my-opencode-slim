@@ -177,6 +177,9 @@ describe('config-io', () => {
         presets: {
           openai: {
             orchestrator: { model: 'openai/gpt-4' },
+            oracle: { model: 'anthropic/claude-opus-4-6' },
+            explorer: { model: 'github-copilot/grok-code-fast-1' },
+            librarian: { model: 'zai-coding-plan/glm-4.7' },
           },
         },
         tmux: { enabled: true },
@@ -187,6 +190,9 @@ describe('config-io', () => {
     expect(detected.isInstalled).toBe(true);
     expect(detected.hasKimi).toBe(true);
     expect(detected.hasOpenAI).toBe(true);
+    expect(detected.hasAnthropic).toBe(true);
+    expect(detected.hasCopilot).toBe(true);
+    expect(detected.hasZaiPlan).toBe(true);
     expect(detected.hasTmux).toBe(true);
   });
 

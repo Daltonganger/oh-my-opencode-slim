@@ -31,6 +31,30 @@ export const MODEL_MAPPINGS = {
     designer: { model: 'openai/gpt-5.1-codex-mini', variant: 'medium' },
     fixer: { model: 'openai/gpt-5.1-codex-mini', variant: 'low' },
   },
+  anthropic: {
+    orchestrator: { model: 'anthropic/claude-opus-4-6' },
+    oracle: { model: 'anthropic/claude-opus-4-6', variant: 'high' },
+    librarian: { model: 'anthropic/claude-sonnet-4-5', variant: 'low' },
+    explorer: { model: 'anthropic/claude-haiku-4-5', variant: 'low' },
+    designer: { model: 'anthropic/claude-sonnet-4-5', variant: 'medium' },
+    fixer: { model: 'anthropic/claude-sonnet-4-5', variant: 'low' },
+  },
+  copilot: {
+    orchestrator: { model: 'github-copilot/grok-code-fast-1' },
+    oracle: { model: 'github-copilot/grok-code-fast-1', variant: 'high' },
+    librarian: { model: 'github-copilot/grok-code-fast-1', variant: 'low' },
+    explorer: { model: 'github-copilot/grok-code-fast-1', variant: 'low' },
+    designer: { model: 'github-copilot/grok-code-fast-1', variant: 'medium' },
+    fixer: { model: 'github-copilot/grok-code-fast-1', variant: 'low' },
+  },
+  'zai-plan': {
+    orchestrator: { model: 'zai-coding-plan/glm-4.7' },
+    oracle: { model: 'zai-coding-plan/glm-4.7', variant: 'high' },
+    librarian: { model: 'zai-coding-plan/glm-4.7', variant: 'low' },
+    explorer: { model: 'zai-coding-plan/glm-4.7', variant: 'low' },
+    designer: { model: 'zai-coding-plan/glm-4.7', variant: 'medium' },
+    fixer: { model: 'zai-coding-plan/glm-4.7', variant: 'low' },
+  },
   antigravity: {
     orchestrator: { model: 'google/antigravity-gemini-3-flash' },
     oracle: { model: 'google/antigravity-gemini-3-pro' },
@@ -163,6 +187,9 @@ export function generateLiteConfig(
   let activePreset:
     | 'kimi'
     | 'openai'
+    | 'anthropic'
+    | 'copilot'
+    | 'zai-plan'
     | 'antigravity'
     | 'chutes'
     | 'antigravity-mixed-both'
@@ -187,6 +214,12 @@ export function generateLiteConfig(
     activePreset = 'kimi';
   } else if (installConfig.hasOpenAI) {
     activePreset = 'openai';
+  } else if (installConfig.hasAnthropic) {
+    activePreset = 'anthropic';
+  } else if (installConfig.hasCopilot) {
+    activePreset = 'copilot';
+  } else if (installConfig.hasZaiPlan) {
+    activePreset = 'zai-plan';
   } else if (installConfig.hasChutes) {
     activePreset = 'chutes';
   }
@@ -337,6 +370,15 @@ export function generateLiteConfig(
         installConfig.hasOpenAI
           ? MODEL_MAPPINGS.openai[agentName].model
           : undefined,
+        installConfig.hasAnthropic
+          ? MODEL_MAPPINGS.anthropic[agentName].model
+          : undefined,
+        installConfig.hasCopilot
+          ? MODEL_MAPPINGS.copilot[agentName].model
+          : undefined,
+        installConfig.hasZaiPlan
+          ? MODEL_MAPPINGS['zai-plan'][agentName].model
+          : undefined,
         installConfig.hasKimi
           ? MODEL_MAPPINGS.kimi[agentName].model
           : undefined,
@@ -394,6 +436,9 @@ export function generateLiteConfig(
       (config.presets as Record<string, Record<string, unknown>>)[activePreset],
       installConfig.hasKimi ||
         installConfig.hasOpenAI ||
+        installConfig.hasAnthropic ||
+        installConfig.hasCopilot ||
+        installConfig.hasZaiPlan ||
         installConfig.hasAntigravity ||
         installConfig.hasChutes === true,
     );
@@ -412,6 +457,9 @@ export function generateLiteConfig(
       (config.presets as Record<string, Record<string, unknown>>)[activePreset],
       installConfig.hasKimi ||
         installConfig.hasOpenAI ||
+        installConfig.hasAnthropic ||
+        installConfig.hasCopilot ||
+        installConfig.hasZaiPlan ||
         installConfig.hasAntigravity ||
         installConfig.hasChutes === true,
     );

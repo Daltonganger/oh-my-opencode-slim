@@ -121,6 +121,15 @@ function formatConfigSummary(config: InstallConfig): string {
     `  ${config.hasOpenAI ? SYMBOLS.check : `${DIM}○${RESET}`} OpenAI`,
   );
   lines.push(
+    `  ${config.hasAnthropic ? SYMBOLS.check : `${DIM}○${RESET}`} Anthropic`,
+  );
+  lines.push(
+    `  ${config.hasCopilot ? SYMBOLS.check : `${DIM}○${RESET}`} GitHub Copilot`,
+  );
+  lines.push(
+    `  ${config.hasZaiPlan ? SYMBOLS.check : `${DIM}○${RESET}`} ZAI Coding Plan`,
+  );
+  lines.push(
     `  ${config.hasAntigravity ? SYMBOLS.check : `${DIM}○${RESET}`} Antigravity (Google)`,
   );
   lines.push(
@@ -188,6 +197,9 @@ function argsToConfig(args: InstallArgs): InstallConfig {
   return {
     hasKimi: args.kimi === 'yes',
     hasOpenAI: args.openai === 'yes',
+    hasAnthropic: args.anthropic === 'yes',
+    hasCopilot: args.copilot === 'yes',
+    hasZaiPlan: args.zaiPlan === 'yes',
     hasAntigravity: args.antigravity === 'yes',
     hasChutes: args.chutes === 'yes',
     hasOpencodeZen: true, // Always enabled - free models available to all users
@@ -267,7 +279,7 @@ async function runInteractiveMode(
   // TODO: tmux has a bug, disabled for now
   // const tmuxInstalled = await isTmuxInstalled()
   // const totalQuestions = tmuxInstalled ? 3 : 2
-  const totalQuestions = 5;
+  const totalQuestions = 8;
 
   try {
     console.log(`${BOLD}Question 1/${totalQuestions}:${RESET}`);
@@ -346,6 +358,30 @@ async function runInteractiveMode(
     console.log();
 
     console.log(`${BOLD}Question 4/${totalQuestions}:${RESET}`);
+    const anthropic = await askYesNo(
+      rl,
+      'Do you have access to Anthropic models?',
+      detected.hasAnthropic ? 'yes' : 'no',
+    );
+    console.log();
+
+    console.log(`${BOLD}Question 5/${totalQuestions}:${RESET}`);
+    const copilot = await askYesNo(
+      rl,
+      'Do you have access to GitHub Copilot models?',
+      detected.hasCopilot ? 'yes' : 'no',
+    );
+    console.log();
+
+    console.log(`${BOLD}Question 6/${totalQuestions}:${RESET}`);
+    const zaiPlan = await askYesNo(
+      rl,
+      'Do you have access to ZAI Coding Plan models?',
+      detected.hasZaiPlan ? 'yes' : 'no',
+    );
+    console.log();
+
+    console.log(`${BOLD}Question 7/${totalQuestions}:${RESET}`);
     const antigravity = await askYesNo(
       rl,
       'Enable Antigravity authentication for Google models?',
@@ -353,7 +389,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 5/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 8/${totalQuestions}:${RESET}`);
     const chutes = await askYesNo(
       rl,
       'Enable Chutes provider with free daily capped models?',
@@ -440,6 +476,9 @@ async function runInteractiveMode(
     return {
       hasKimi: kimi === 'yes',
       hasOpenAI: openai === 'yes',
+      hasAnthropic: anthropic === 'yes',
+      hasCopilot: copilot === 'yes',
+      hasZaiPlan: zaiPlan === 'yes',
       hasAntigravity: antigravity === 'yes',
       hasChutes: chutes === 'yes',
       hasOpencodeZen: true,
@@ -689,6 +728,9 @@ async function runInstall(config: InstallConfig): Promise<number> {
   if (
     !resolvedConfig.hasKimi &&
     !resolvedConfig.hasOpenAI &&
+    !resolvedConfig.hasAnthropic &&
+    !resolvedConfig.hasCopilot &&
+    !resolvedConfig.hasZaiPlan &&
     !resolvedConfig.hasAntigravity &&
     !resolvedConfig.hasChutes
   ) {
@@ -709,6 +751,9 @@ async function runInstall(config: InstallConfig): Promise<number> {
   if (
     resolvedConfig.hasKimi ||
     resolvedConfig.hasOpenAI ||
+    resolvedConfig.hasAnthropic ||
+    resolvedConfig.hasCopilot ||
+    resolvedConfig.hasZaiPlan ||
     resolvedConfig.hasAntigravity ||
     resolvedConfig.hasChutes
   ) {
@@ -721,6 +766,18 @@ async function runInstall(config: InstallConfig): Promise<number> {
     if (resolvedConfig.hasAntigravity) {
       console.log();
       console.log(`     Then select ${BOLD}google${RESET} provider.`);
+    }
+    if (resolvedConfig.hasAnthropic) {
+      console.log();
+      console.log(`     Then select ${BOLD}anthropic${RESET} provider.`);
+    }
+    if (resolvedConfig.hasCopilot) {
+      console.log();
+      console.log(`     Then select ${BOLD}github-copilot${RESET} provider.`);
+    }
+    if (resolvedConfig.hasZaiPlan) {
+      console.log();
+      console.log(`     Then select ${BOLD}zai-coding-plan${RESET} provider.`);
     }
     if (resolvedConfig.hasChutes) {
       console.log();
@@ -746,7 +803,16 @@ async function runInstall(config: InstallConfig): Promise<number> {
 export async function install(args: InstallArgs): Promise<number> {
   // Non-interactive mode: all args must be provided
   if (!args.tui) {
-    const requiredArgs = ['kimi', 'openai', 'tmux'] as const;
+    const requiredArgs = [
+      'kimi',
+      'openai',
+      'anthropic',
+      'copilot',
+      'zaiPlan',
+      'antigravity',
+      'chutes',
+      'tmux',
+    ] as const;
     const errors = requiredArgs.filter((key) => {
       const value = args[key];
       return value === undefined || !['yes', 'no'].includes(value);
@@ -756,11 +822,12 @@ export async function install(args: InstallArgs): Promise<number> {
       printHeader(false);
       printError('Missing or invalid arguments:');
       for (const key of errors) {
-        console.log(`  ${SYMBOLS.bullet} --${key}=<yes|no>`);
+        const flagName = key === 'zaiPlan' ? 'zai-plan' : key;
+        console.log(`  ${SYMBOLS.bullet} --${flagName}=<yes|no>`);
       }
       console.log();
       printInfo(
-        'Usage: bunx oh-my-opencode-slim install --no-tui --kimi=<yes|no> --openai=<yes|no> --antigravity=<yes|no> --chutes=<yes|no> --tmux=<yes|no>',
+        'Usage: bunx oh-my-opencode-slim install --no-tui --kimi=<yes|no> --openai=<yes|no> --anthropic=<yes|no> --copilot=<yes|no> --zai-plan=<yes|no> --antigravity=<yes|no> --chutes=<yes|no> --tmux=<yes|no>',
       );
       console.log();
       return 1;

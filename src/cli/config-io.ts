@@ -391,6 +391,9 @@ export function detectCurrentConfig(): DetectedConfig {
     isInstalled: false,
     hasKimi: false,
     hasOpenAI: false,
+    hasAnthropic: false,
+    hasCopilot: false,
+    hasZaiPlan: false,
     hasAntigravity: false,
     hasChutes: false,
     hasOpencodeZen: false,
@@ -409,6 +412,9 @@ export function detectCurrentConfig(): DetectedConfig {
   // Check for providers
   const providers = config.provider as Record<string, unknown> | undefined;
   result.hasKimi = !!providers?.kimi;
+  result.hasAnthropic = !!providers?.anthropic;
+  result.hasCopilot = !!providers?.['github-copilot'];
+  result.hasZaiPlan = !!providers?.['zai-coding-plan'];
   result.hasChutes = !!providers?.chutes;
   if (providers?.google) result.hasAntigravity = true;
 
@@ -427,6 +433,9 @@ export function detectCurrentConfig(): DetectedConfig {
         .map((a) => a?.model)
         .filter(Boolean);
       result.hasOpenAI = models.some((m) => m?.startsWith('openai/'));
+      result.hasAnthropic = models.some((m) => m?.startsWith('anthropic/'));
+      result.hasCopilot = models.some((m) => m?.startsWith('github-copilot/'));
+      result.hasZaiPlan = models.some((m) => m?.startsWith('zai-coding-plan/'));
       result.hasOpencodeZen = models.some((m) => m?.startsWith('opencode/'));
       if (models.some((m) => m?.startsWith('google/'))) {
         result.hasAntigravity = true;

@@ -14,6 +14,12 @@ function parseArgs(args: string[]): InstallArgs {
       result.kimi = arg.split('=')[1] as BooleanArg;
     } else if (arg.startsWith('--openai=')) {
       result.openai = arg.split('=')[1] as BooleanArg;
+    } else if (arg.startsWith('--anthropic=')) {
+      result.anthropic = arg.split('=')[1] as BooleanArg;
+    } else if (arg.startsWith('--copilot=')) {
+      result.copilot = arg.split('=')[1] as BooleanArg;
+    } else if (arg.startsWith('--zai-plan=')) {
+      result.zaiPlan = arg.split('=')[1] as BooleanArg;
     } else if (arg.startsWith('--antigravity=')) {
       result.antigravity = arg.split('=')[1] as BooleanArg;
     } else if (arg.startsWith('--chutes=')) {
@@ -44,6 +50,9 @@ Usage: bunx oh-my-opencode-slim install [OPTIONS]
 Options:
   --kimi=yes|no          Kimi API access (yes/no)
   --openai=yes|no        OpenAI API access (yes/no)
+  --anthropic=yes|no     Anthropic access (yes/no)
+  --copilot=yes|no       GitHub Copilot access (yes/no)
+  --zai-plan=yes|no      ZAI Coding Plan access (yes/no)
   --antigravity=yes|no   Antigravity/Google models (yes/no)
   --chutes=yes|no        Chutes models (yes/no)
   --opencode-free=yes|no Use OpenCode free models (opencode/*)
@@ -55,7 +64,7 @@ Options:
 
 Examples:
   bunx oh-my-opencode-slim install
-  bunx oh-my-opencode-slim install --no-tui --kimi=yes --openai=yes --antigravity=yes --chutes=no --opencode-free=yes --opencode-free-model=auto --tmux=no --skills=yes
+  bunx oh-my-opencode-slim install --no-tui --kimi=yes --openai=yes --anthropic=yes --copilot=no --zai-plan=no --antigravity=yes --chutes=no --opencode-free=yes --opencode-free-model=auto --tmux=no --skills=yes
 `);
 }
 
