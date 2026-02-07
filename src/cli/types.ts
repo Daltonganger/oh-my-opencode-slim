@@ -112,7 +112,7 @@ export interface InstallConfig {
   availableOpenCodeFreeModels?: OpenCodeFreeModel[];
   selectedChutesPrimaryModel?: string;
   selectedChutesSecondaryModel?: string;
-  availableChutesFreeModels?: OpenCodeFreeModel[];
+  availableChutesModels?: DiscoveredModel[];
   dynamicModelPlan?: DynamicModelPlan;
   scoringEngineVersion?: ScoringEngineVersion;
   artificialAnalysisApiKey?: string;

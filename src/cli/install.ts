@@ -9,7 +9,7 @@ import {
   disableDefaultAgents,
   discoverModelCatalog,
   discoverOpenCodeFreeModels,
-  discoverProviderFreeModels,
+  discoverProviderModels,
   fetchExternalModelSignals,
   generateLiteConfig,
   getOpenCodeVersion,
@@ -27,6 +27,7 @@ import type {
   BooleanArg,
   ConfigMergeResult,
   DetectedConfig,
+  DiscoveredModel,
   InstallArgs,
   InstallConfig,
   OpenCodeFreeModel,
@@ -340,7 +341,7 @@ async function runInteractiveMode(
     let availableOpenCodeFreeModels: OpenCodeFreeModel[] | undefined;
     let selectedOpenCodePrimaryModel: string | undefined;
     let selectedOpenCodeSecondaryModel: string | undefined;
-    let availableChutesFreeModels: OpenCodeFreeModel[] | undefined;
+    let availableChutesModels: DiscoveredModel[] | undefined;
     let selectedChutesPrimaryModel: string | undefined;
     let selectedChutesSecondaryModel: string | undefined;
 
@@ -439,7 +440,7 @@ async function runInteractiveMode(
     console.log(`${BOLD}Question 10/${totalQuestions}:${RESET}`);
     const chutes = await askYesNo(
       rl,
-      'Enable Chutes provider with free daily capped models?',
+      'Enable Chutes provider via OpenCode auth flow?',
       detected.hasChutes ? 'yes' : 'no',
     );
     console.log();
@@ -448,22 +449,22 @@ async function runInteractiveMode(
       printInfo(
         'Refreshing Chutes model list with: opencode models --refresh --verbose',
       );
-      const discovery = await discoverProviderFreeModels('chutes');
+      const discovery = await discoverProviderModels('chutes');
 
       if (discovery.models.length === 0) {
         printWarning(
           discovery.error ??
-            'No free Chutes models found. Continuing without Chutes dynamic assignment.',
+            'No Chutes models found. Continuing without Chutes dynamic assignment.',
         );
       } else {
-        availableChutesFreeModels = discovery.models;
+        availableChutesModels = discovery.models;
 
         const recommendedPrimary =
           pickBestCodingChutesModel(discovery.models)?.model ??
           discovery.models[0]?.model;
 
         if (recommendedPrimary) {
-          console.log(`${BOLD}Chutes Free Models:${RESET}`);
+          console.log(`${BOLD}Chutes Models:${RESET}`);
           selectedChutesPrimaryModel = await askModelSelection(
             rl,
             discovery.models,
@@ -536,7 +537,7 @@ async function runInteractiveMode(
       availableOpenCodeFreeModels,
       selectedChutesPrimaryModel,
       selectedChutesSecondaryModel,
-      availableChutesFreeModels,
+      availableChutesModels,
       artificialAnalysisApiKey,
       openRouterApiKey,
       hasTmux: false,
@@ -653,21 +654,17 @@ async function runInstall(config: InstallConfig): Promise<number> {
 
   if (
     resolvedConfig.hasChutes &&
-    (resolvedConfig.availableChutesFreeModels?.length ?? 0) === 0
+    (resolvedConfig.availableChutesModels?.length ?? 0) === 0
   ) {
-    printStep(
-      step++,
-      totalSteps,
-      'Refreshing Chutes free models (chutes/*)...',
-    );
-    const discovery = await discoverProviderFreeModels('chutes');
+    printStep(step++, totalSteps, 'Refreshing Chutes models (chutes/*)...');
+    const discovery = await discoverProviderModels('chutes');
     if (discovery.models.length === 0) {
       printWarning(
         discovery.error ??
-          'No free Chutes models found. Continuing with fallback Chutes mapping.',
+          'No Chutes models found. Continuing with fallback Chutes mapping.',
       );
     } else {
-      resolvedConfig.availableChutesFreeModels = discovery.models;
+      resolvedConfig.availableChutesModels = discovery.models;
       resolvedConfig.selectedChutesPrimaryModel =
         resolvedConfig.selectedChutesPrimaryModel ??
         pickBestCodingChutesModel(discovery.models)?.model ??
@@ -686,9 +683,9 @@ async function runInstall(config: InstallConfig): Promise<number> {
     }
   } else if (
     resolvedConfig.hasChutes &&
-    (resolvedConfig.availableChutesFreeModels?.length ?? 0) > 0
+    (resolvedConfig.availableChutesModels?.length ?? 0) > 0
   ) {
-    const availableChutes = resolvedConfig.availableChutesFreeModels ?? [];
+    const availableChutes = resolvedConfig.availableChutesModels ?? [];
     resolvedConfig.selectedChutesPrimaryModel =
       resolvedConfig.selectedChutesPrimaryModel ??
       pickBestCodingChutesModel(availableChutes)?.model;
@@ -703,7 +700,7 @@ async function runInstall(config: InstallConfig): Promise<number> {
     printStep(
       step++,
       totalSteps,
-      'Using previously refreshed Chutes free model list...',
+      'Using previously refreshed Chutes model list...',
     );
     printSuccess(
       `Chutes models ready (${availableChutes.length} models found)`,
@@ -732,9 +729,9 @@ async function runInstall(config: InstallConfig): Promise<number> {
   }
 
   if (resolvedConfig.hasChutes) {
-    printStep(step++, totalSteps, 'Configuring Chutes Provider...');
+    printStep(step++, totalSteps, 'Enabling Chutes auth flow...');
     const chutesProviderResult = addChutesProvider();
-    if (!handleStepResult(chutesProviderResult, 'Chutes Provider configured'))
+    if (!handleStepResult(chutesProviderResult, 'Chutes auth flow ready'))
       return 1;
   }
 
@@ -880,7 +877,7 @@ async function runInstall(config: InstallConfig): Promise<number> {
     }
     if (resolvedConfig.hasChutes) {
       console.log();
-      console.log(`     Then set ${BOLD}CHUTES_API_KEY${RESET} in your shell.`);
+      console.log(`     Then select ${BOLD}chutes${RESET} provider.`);
     }
     console.log();
   }

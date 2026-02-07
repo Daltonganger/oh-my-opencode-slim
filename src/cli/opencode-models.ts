@@ -158,8 +158,11 @@ export function parseOpenCodeModelsVerboseOutput(
   return models;
 }
 
-async function discoverFreeModelsByProvider(providerID?: string): Promise<{
-  models: OpenCodeFreeModel[];
+async function discoverModelsByProvider(
+  providerID?: string,
+  freeOnly = true,
+): Promise<{
+  models: DiscoveredModel[];
   error?: string;
 }> {
   try {
@@ -180,11 +183,7 @@ async function discoverFreeModelsByProvider(providerID?: string): Promise<{
     }
 
     return {
-      models: parseOpenCodeModelsVerboseOutput(
-        stdout,
-        providerID,
-        true,
-      ) as OpenCodeFreeModel[],
+      models: parseOpenCodeModelsVerboseOutput(stdout, providerID, freeOnly),
     };
   } catch {
     return {
@@ -230,12 +229,21 @@ export async function discoverOpenCodeFreeModels(): Promise<{
   models: OpenCodeFreeModel[];
   error?: string;
 }> {
-  return discoverFreeModelsByProvider('opencode');
+  const result = await discoverModelsByProvider('opencode', true);
+  return { models: result.models as OpenCodeFreeModel[], error: result.error };
 }
 
 export async function discoverProviderFreeModels(providerID: string): Promise<{
   models: OpenCodeFreeModel[];
   error?: string;
 }> {
-  return discoverFreeModelsByProvider(providerID);
+  const result = await discoverModelsByProvider(providerID, true);
+  return { models: result.models as OpenCodeFreeModel[], error: result.error };
+}
+
+export async function discoverProviderModels(providerID: string): Promise<{
+  models: DiscoveredModel[];
+  error?: string;
+}> {
+  return discoverModelsByProvider(providerID, false);
 }
