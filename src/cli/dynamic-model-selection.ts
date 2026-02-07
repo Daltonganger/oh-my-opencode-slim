@@ -1,8 +1,11 @@
+import { resolveAgentWithPrecedence } from './precedence-resolver';
+import { rankModelsV2 } from './scoring-v2';
 import type {
   DiscoveredModel,
   DynamicModelPlan,
   ExternalSignalMap,
   InstallConfig,
+  ScoringEngineVersion,
 } from './types';
 
 const AGENTS = [
@@ -773,6 +776,9 @@ export function buildDynamicModelPlan(
   catalog: DiscoveredModel[],
   config: InstallConfig,
   externalSignals?: ExternalSignalMap,
+  options?: {
+    scoringEngineVersion?: ScoringEngineVersion;
+  },
 ): DynamicModelPlan | null {
   const catalogWithSelectedModels = [
     config.selectedChutesPrimaryModel,
@@ -814,12 +820,50 @@ export function buildDynamicModelPlan(
     }
   }
   const providerUsage = new Map<string, number>();
+  const engineVersion =
+    options?.scoringEngineVersion ?? config.scoringEngineVersion ?? 'v1';
+  const rankCache = new Map<AgentName, DiscoveredModel[]>();
+  const shadowDiffs: Record<
+    string,
+    { v1TopModel?: string; v2TopModel?: string }
+  > = {};
 
   const agents: Record<string, { model: string; variant?: string }> = {};
   const chains: Record<string, string[]> = {};
+  const provenance: DynamicModelPlan['provenance'] = {};
+
+  const getRankedModels = (agent: AgentName): DiscoveredModel[] => {
+    const cached = rankCache.get(agent);
+    if (cached) return cached;
+
+    const rankedV1 = rankModels(providerCandidates, agent, externalSignals);
+
+    if (engineVersion === 'v1') {
+      rankCache.set(agent, rankedV1);
+      return rankedV1;
+    }
+
+    const rankedV2 = rankModelsV2(
+      providerCandidates,
+      agent,
+      externalSignals,
+    ).map((candidate) => candidate.model);
+
+    if (engineVersion === 'v2-shadow') {
+      shadowDiffs[agent] = {
+        v1TopModel: rankedV1[0]?.model,
+        v2TopModel: rankedV2[0]?.model,
+      };
+      rankCache.set(agent, rankedV1);
+      return rankedV1;
+    }
+
+    rankCache.set(agent, rankedV2);
+    return rankedV2;
+  };
 
   for (const [agentIndex, agent] of PRIMARY_ASSIGNMENT_ORDER.entries()) {
-    const ranked = rankModels(providerCandidates, agent, externalSignals);
+    const ranked = getRankedModels(agent);
     const primaryPool = hasPaidProviderEnabled
       ? ranked.filter((model) => !FREE_BIASED_PROVIDERS.has(model.providerID))
       : ranked;
@@ -885,11 +929,21 @@ export function buildDynamicModelPlan(
 
     const finalizedChain = finalizeChainWithTail(chain, deterministicFreeTail);
 
+    const providerPolicyChain = dedupe([selectedChutes, selectedOpencode]);
+    const systemDefaultModel = selectedOpencode ?? 'opencode/big-pickle';
+    const resolved = resolveAgentWithPrecedence({
+      agentName: agent,
+      dynamicRecommendation: finalizedChain,
+      providerFallbackPolicy: providerPolicyChain,
+      systemDefault: [systemDefaultModel],
+    });
+
     agents[agent] = {
-      model: finalizedChain[0] ?? primary.model,
+      model: resolved.model,
       variant: ROLE_VARIANT[agent],
     };
-    chains[agent] = finalizedChain;
+    chains[agent] = resolved.chain;
+    provenance[agent] = resolved.provenance;
   }
 
   if (hasPaidProviderEnabled) {
@@ -908,7 +962,7 @@ export function buildDynamicModelPlan(
         const currentModel = agents[agent]?.model;
         if (!currentModel) continue;
 
-        const ranked = rankModels(providerCandidates, agent, externalSignals);
+        const ranked = getRankedModels(agent);
         const candidate = ranked.find(
           (model) => model.providerID === providerID,
         );
@@ -960,5 +1014,14 @@ export function buildDynamicModelPlan(
     return null;
   }
 
-  return { agents, chains };
+  return {
+    agents,
+    chains,
+    provenance,
+    scoring: {
+      engineVersionApplied: engineVersion === 'v2' ? 'v2' : 'v1',
+      shadowCompared: engineVersion === 'v2-shadow',
+      diffs: engineVersion === 'v2-shadow' ? shadowDiffs : undefined,
+    },
+  };
 }

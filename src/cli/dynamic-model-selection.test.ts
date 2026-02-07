@@ -91,5 +91,27 @@ describe('dynamic-model-selection', () => {
     expect(chains.orchestrator).toContain('chutes/kimi-k2.5');
     expect(chains.explorer).toContain('opencode/gpt-5-nano');
     expect(chains.fixer[chains.fixer.length - 1]).toBe('opencode/gpt-5-nano');
+    expect(plan?.provenance?.oracle?.winnerLayer).toBe(
+      'dynamic-recommendation',
+    );
+    expect(plan?.scoring?.engineVersionApplied).toBe('v1');
+  });
+
+  test('supports v2-shadow mode without changing applied engine', () => {
+    const plan = buildDynamicModelPlan(
+      [
+        m({ model: 'openai/gpt-5.3-codex', reasoning: true, toolcall: true }),
+        m({ model: 'chutes/kimi-k2.5', reasoning: true, toolcall: true }),
+        m({ model: 'opencode/gpt-5-nano', reasoning: true, toolcall: true }),
+      ],
+      baseInstallConfig(),
+      undefined,
+      { scoringEngineVersion: 'v2-shadow' },
+    );
+
+    expect(plan).not.toBeNull();
+    expect(plan?.scoring?.engineVersionApplied).toBe('v1');
+    expect(plan?.scoring?.shadowCompared).toBe(true);
+    expect(plan?.scoring?.diffs?.oracle).toBeDefined();
   });
 });

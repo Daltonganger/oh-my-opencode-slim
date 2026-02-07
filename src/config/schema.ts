@@ -81,6 +81,7 @@ export type FailoverConfig = z.infer<typeof FailoverConfigSchema>;
 // Main plugin config
 export const PluginConfigSchema = z.object({
   preset: z.string().optional(),
+  scoringEngineVersion: z.enum(['v1', 'v2-shadow', 'v2']).optional(),
   presets: z.record(z.string(), PresetSchema).optional(),
   agents: z.record(z.string(), AgentOverrideConfigSchema).optional(),
   disabled_mcps: z.array(z.string()).optional(),

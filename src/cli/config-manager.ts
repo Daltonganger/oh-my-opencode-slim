@@ -6,5 +6,7 @@ export * from './model-selection';
 export * from './opencode-models';
 export * from './opencode-selection';
 export * from './paths';
+export * from './precedence-resolver';
 export * from './providers';
+export * from './scoring-v2';
 export * from './system';
