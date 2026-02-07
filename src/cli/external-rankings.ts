@@ -184,7 +184,9 @@ async function fetchOpenRouterSignals(
 
       // Only add Chutes alias if it doesn't already exist
       const chutesAlias = `chutes/${alias}`;
-      map[chutesAlias] = mergeSignal(map[chutesAlias], signal);
+      if (!map[chutesAlias]) {
+        map[chutesAlias] = mergeSignal(map[chutesAlias], signal);
+      }
     }
   }
 
