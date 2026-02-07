@@ -36,6 +36,19 @@ function normalizeKey(input: string): string {
   return input.trim().toLowerCase();
 }
 
+function baseAliases(key: string): string[] {
+  const normalized = normalizeKey(key);
+  const aliases = new Set<string>([normalized]);
+  const slashIndex = normalized.indexOf('/');
+  const idPart =
+    slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+
+  aliases.add(idPart);
+  aliases.add(idPart.replace(/-(free|flash)$/i, ''));
+
+  return [...aliases];
+}
+
 function mergeSignal(
   existing: ExternalModelSignal | undefined,
   incoming: ExternalModelSignal,
@@ -129,12 +142,18 @@ async function fetchArtificialAnalysisSignals(
 
     for (const key of [id, slug, name]) {
       if (!key) continue;
-      map[key] = mergeSignal(map[key], baseSignal);
-      if (providerPrefix) {
-        map[`${providerPrefix}/${key}`] = mergeSignal(
-          map[`${providerPrefix}/${key}`],
-          baseSignal,
-        );
+      for (const alias of baseAliases(key)) {
+        map[alias] = mergeSignal(map[alias], baseSignal);
+
+        if (providerPrefix) {
+          const providerAlias = `${providerPrefix}/${alias}`;
+          map[providerAlias] = mergeSignal(map[providerAlias], baseSignal);
+
+          if (providerPrefix !== 'chutes') {
+            const chutesAlias = `chutes/${alias}`;
+            map[chutesAlias] = mergeSignal(map[chutesAlias], baseSignal);
+          }
+        }
       }
     }
   }
@@ -166,7 +185,12 @@ async function fetchOpenRouterSignals(
       outputPricePer1M: parseOpenRouterPrice(model.pricing?.completion),
       source: 'openrouter',
     };
-    map[key] = mergeSignal(map[key], signal);
+
+    for (const alias of baseAliases(key)) {
+      map[alias] = mergeSignal(map[alias], signal);
+      const chutesAlias = `chutes/${alias}`;
+      map[chutesAlias] = mergeSignal(map[chutesAlias], signal);
+    }
   }
 
   return map;

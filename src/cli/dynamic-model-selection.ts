@@ -106,6 +106,22 @@ function isKimiK25Model(model: DiscoveredModel): boolean {
   return /kimi-k2\.?5|k2\.?5/i.test(`${model.model} ${model.name}`);
 }
 
+function modelLookupKeys(model: DiscoveredModel): string[] {
+  const fullKey = model.model.toLowerCase();
+  const idKey = model.model.split('/')[1]?.toLowerCase();
+  const keys = new Set<string>();
+
+  keys.add(fullKey);
+  if (idKey) keys.add(idKey);
+
+  if (model.providerID === 'chutes' && idKey) {
+    keys.add(`chutes/${idKey}`);
+    keys.add(idKey.replace(/-(free|flash)$/i, ''));
+  }
+
+  return [...keys];
+}
+
 function roleScore(agent: AgentName, model: DiscoveredModel): number {
   const lowered = `${model.model} ${model.name}`.toLowerCase();
   const reasoning = model.reasoning ? 1 : 0;
@@ -212,16 +228,18 @@ function roleScore(agent: AgentName, model: DiscoveredModel): number {
     );
   }
   if (agent === 'explorer') {
-    const flashAdjustment = flash ? 10 : 0;
+    const flashAdjustment = flash ? 26 : -10;
     const zaiAdjustment = zai47NonFlash ? 2 : zai47Flash ? 6 : 0;
+    const deepPenalty = deep * -18;
     return (
       score +
-      fast * 35 +
+      fast * 68 +
       toolcall * 28 +
-      reasoning * 8 +
-      context * 0.7 +
+      reasoning * 2 +
+      context * 0.2 +
       flashAdjustment +
       zaiAdjustment +
+      deepPenalty +
       providerBias
     );
   }
@@ -258,29 +276,56 @@ function roleScore(agent: AgentName, model: DiscoveredModel): number {
 }
 
 function getExternalSignalBoost(
+  agent: AgentName,
   model: DiscoveredModel,
   externalSignals: ExternalSignalMap | undefined,
 ): number {
   if (!externalSignals) return 0;
 
-  const fullKey = model.model.toLowerCase();
-  const idKey = model.model.split('/')[1]?.toLowerCase();
-  const signal =
-    externalSignals[fullKey] ?? (idKey ? externalSignals[idKey] : undefined);
+  const signal = modelLookupKeys(model)
+    .map((key) => externalSignals[key])
+    .find((item) => item !== undefined);
+
   if (!signal) return 0;
 
-  const qualityBoost = (signal.qualityScore ?? 0) * 0.12;
-  const codingBoost = (signal.codingScore ?? 0) * 0.18;
-  const latencyPenalty = Math.min(signal.latencySeconds ?? 0, 25) * 0.7;
+  const qualityScore = signal.qualityScore ?? 0;
+  const codingScore = signal.codingScore ?? 0;
+  const latencySeconds = signal.latencySeconds;
 
   const blendedPrice =
     signal.inputPricePer1M !== undefined &&
     signal.outputPricePer1M !== undefined
       ? signal.inputPricePer1M * 0.75 + signal.outputPricePer1M * 0.25
       : (signal.inputPricePer1M ?? signal.outputPricePer1M ?? 0);
-  const pricePenalty = Math.min(blendedPrice, 30) * 0.08;
+  if (agent === 'explorer') {
+    const qualityBoost = qualityScore * 0.05;
+    const codingBoost = codingScore * 0.08;
+    const latencyPenalty =
+      typeof latencySeconds === 'number' && Number.isFinite(latencySeconds)
+        ? Math.min(latencySeconds, 12) * 3.2 +
+          (latencySeconds > 7 ? 16 : latencySeconds > 4 ? 10 : 0)
+        : 0;
+    const pricePenalty = Math.min(blendedPrice, 30) * 0.03;
+    const qualityFloorPenalty =
+      qualityScore > 0 && qualityScore < 35 ? (35 - qualityScore) * 0.8 : 0;
+    const boost =
+      qualityBoost +
+      codingBoost -
+      latencyPenalty -
+      pricePenalty -
+      qualityFloorPenalty;
+    return Math.max(-90, Math.min(25, boost));
+  }
 
-  return qualityBoost + codingBoost - latencyPenalty - pricePenalty;
+  const qualityBoost = qualityScore * 0.16;
+  const codingBoost = codingScore * 0.24;
+  const latencyPenalty =
+    typeof latencySeconds === 'number' && Number.isFinite(latencySeconds)
+      ? Math.min(latencySeconds, 25) * 0.22
+      : 0;
+  const pricePenalty = Math.min(blendedPrice, 30) * 0.08;
+  const boost = qualityBoost + codingBoost - latencyPenalty - pricePenalty;
+  return Math.max(-30, Math.min(45, boost));
 }
 
 function rankModels(
@@ -290,9 +335,9 @@ function rankModels(
 ): DiscoveredModel[] {
   return [...models].sort((a, b) => {
     const scoreA =
-      roleScore(agent, a) + getExternalSignalBoost(a, externalSignals);
+      roleScore(agent, a) + getExternalSignalBoost(agent, a, externalSignals);
     const scoreB =
-      roleScore(agent, b) + getExternalSignalBoost(b, externalSignals);
+      roleScore(agent, b) + getExternalSignalBoost(agent, b, externalSignals);
     const scoreDelta = scoreB - scoreA;
     if (scoreDelta !== 0) return scoreDelta;
 
@@ -309,7 +354,8 @@ function combinedScore(
   externalSignals?: ExternalSignalMap,
 ): number {
   return (
-    roleScore(agent, model) + getExternalSignalBoost(model, externalSignals)
+    roleScore(agent, model) +
+    getExternalSignalBoost(agent, model, externalSignals)
   );
 }
 
@@ -328,7 +374,8 @@ function chooseProviderRepresentative(
 
   const flashScore = combinedScore(agent, flashBest, externalSignals);
   const nonFlashScore = combinedScore(agent, nonFlashBest, externalSignals);
-  return flashScore >= nonFlashScore + 12 ? flashBest : nonFlashBest;
+  const threshold = agent === 'explorer' ? -6 : 12;
+  return flashScore >= nonFlashScore + threshold ? flashBest : nonFlashBest;
 }
 
 function selectPrimaryWithDiversity(
@@ -376,7 +423,11 @@ function selectPrimaryWithDiversity(
     }
   }
 
-  if (isZai47Model(chosen.model) && hasFlashToken(chosen.model)) {
+  if (
+    agent !== 'explorer' &&
+    isZai47Model(chosen.model) &&
+    hasFlashToken(chosen.model)
+  ) {
     const kimiCandidate = candidateScores.find((item) =>
       isKimiK25Model(item.model),
     );
