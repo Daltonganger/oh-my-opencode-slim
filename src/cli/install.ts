@@ -211,10 +211,25 @@ function argsToConfig(args: InstallArgs): InstallConfig {
       args.opencodeFreeModel && args.opencodeFreeModel !== 'auto'
         ? args.opencodeFreeModel
         : undefined,
+    artificialAnalysisApiKey: args.aaKey,
+    openRouterApiKey: args.openrouterKey,
     hasTmux: args.tmux === 'yes',
     installSkills: args.skills === 'yes',
     installCustomSkills: args.skills === 'yes', // Install custom skills when skills=yes
   };
+}
+
+function getEnv(name: string): string | undefined {
+  const bunValue = (globalThis as { Bun?: { env?: Record<string, string> } })
+    .Bun?.env?.[name];
+  if (typeof bunValue === 'string' && bunValue.length > 0) return bunValue;
+
+  const processValue = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process?.env?.[name];
+  return typeof processValue === 'string' && processValue.length > 0
+    ? processValue
+    : undefined;
 }
 
 async function askModelSelection(
@@ -272,6 +287,19 @@ async function askYesNo(
   return defaultValue;
 }
 
+async function askOptionalText(
+  rl: readline.Interface,
+  prompt: string,
+  defaultValue?: string,
+): Promise<string | undefined> {
+  const hint = defaultValue ? `[default: ${defaultValue}]` : '[optional]';
+  const answer = (
+    await rl.question(`${BLUE}${prompt}${RESET} ${DIM}${hint}${RESET}: `)
+  ).trim();
+  if (!answer) return defaultValue;
+  return answer;
+}
+
 async function runInteractiveMode(
   detected: DetectedConfig,
 ): Promise<InstallConfig> {
@@ -282,10 +310,26 @@ async function runInteractiveMode(
   // TODO: tmux has a bug, disabled for now
   // const tmuxInstalled = await isTmuxInstalled()
   // const totalQuestions = tmuxInstalled ? 3 : 2
-  const totalQuestions = 8;
+  const totalQuestions = 10;
 
   try {
     console.log(`${BOLD}Question 1/${totalQuestions}:${RESET}`);
+    const artificialAnalysisApiKey = await askOptionalText(
+      rl,
+      'Artificial Analysis API key for better ranking signals',
+      getEnv('ARTIFICIAL_ANALYSIS_API_KEY'),
+    );
+    console.log();
+
+    console.log(`${BOLD}Question 2/${totalQuestions}:${RESET}`);
+    const openRouterApiKey = await askOptionalText(
+      rl,
+      'OpenRouter API key for pricing/metadata signals',
+      getEnv('OPENROUTER_API_KEY'),
+    );
+    console.log();
+
+    console.log(`${BOLD}Question 3/${totalQuestions}:${RESET}`);
     const useOpenCodeFree = await askYesNo(
       rl,
       'Use only OpenCode free models (opencode/*) with live refresh?',
@@ -344,7 +388,7 @@ async function runInteractiveMode(
       }
     }
 
-    console.log(`${BOLD}Question 2/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 4/${totalQuestions}:${RESET}`);
     const kimi = await askYesNo(
       rl,
       'Do you want to use Kimi For Coding?',
@@ -352,7 +396,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 3/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 5/${totalQuestions}:${RESET}`);
     const openai = await askYesNo(
       rl,
       'Do you have access to OpenAI API?',
@@ -360,7 +404,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 4/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 6/${totalQuestions}:${RESET}`);
     const anthropic = await askYesNo(
       rl,
       'Do you have access to Anthropic models?',
@@ -368,7 +412,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 5/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 7/${totalQuestions}:${RESET}`);
     const copilot = await askYesNo(
       rl,
       'Do you have access to GitHub Copilot models?',
@@ -376,7 +420,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 6/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 8/${totalQuestions}:${RESET}`);
     const zaiPlan = await askYesNo(
       rl,
       'Do you have access to ZAI Coding Plan models?',
@@ -384,7 +428,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 7/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 9/${totalQuestions}:${RESET}`);
     const antigravity = await askYesNo(
       rl,
       'Enable Antigravity authentication for Google models?',
@@ -392,7 +436,7 @@ async function runInteractiveMode(
     );
     console.log();
 
-    console.log(`${BOLD}Question 8/${totalQuestions}:${RESET}`);
+    console.log(`${BOLD}Question 10/${totalQuestions}:${RESET}`);
     const chutes = await askYesNo(
       rl,
       'Enable Chutes provider with free daily capped models?',
@@ -493,6 +537,8 @@ async function runInteractiveMode(
       selectedChutesPrimaryModel,
       selectedChutesSecondaryModel,
       availableChutesFreeModels,
+      artificialAnalysisApiKey,
+      openRouterApiKey,
       hasTmux: false,
       installSkills: skills === 'yes',
       installCustomSkills: customSkills === 'yes',
@@ -697,7 +743,10 @@ async function runInstall(config: InstallConfig): Promise<number> {
           'Unable to discover model catalog. Falling back to static mappings.',
       );
     } else {
-      const { signals, warnings } = await fetchExternalModelSignals();
+      const { signals, warnings } = await fetchExternalModelSignals({
+        artificialAnalysisApiKey: resolvedConfig.artificialAnalysisApiKey,
+        openRouterApiKey: resolvedConfig.openRouterApiKey,
+      });
       for (const warning of warnings) {
         printInfo(warning);
       }

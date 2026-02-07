@@ -13,6 +13,8 @@ export interface InstallArgs {
   skills?: BooleanArg;
   opencodeFree?: BooleanArg;
   opencodeFreeModel?: string;
+  aaKey?: string;
+  openrouterKey?: string;
 }
 
 export interface OpenCodeFreeModel {
@@ -89,6 +91,8 @@ export interface InstallConfig {
   selectedChutesSecondaryModel?: string;
   availableChutesFreeModels?: OpenCodeFreeModel[];
   dynamicModelPlan?: DynamicModelPlan;
+  artificialAnalysisApiKey?: string;
+  openRouterApiKey?: string;
   hasTmux: boolean;
   installSkills: boolean;
   installCustomSkills: boolean;

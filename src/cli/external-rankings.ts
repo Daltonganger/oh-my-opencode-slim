@@ -172,15 +172,19 @@ async function fetchOpenRouterSignals(
   return map;
 }
 
-export async function fetchExternalModelSignals(): Promise<{
+export async function fetchExternalModelSignals(options?: {
+  artificialAnalysisApiKey?: string;
+  openRouterApiKey?: string;
+}): Promise<{
   signals: ExternalSignalMap;
   warnings: string[];
 }> {
   const warnings: string[] = [];
   const aggregate: ExternalSignalMap = {};
 
-  const aaKey = getEnv('ARTIFICIAL_ANALYSIS_API_KEY');
-  const orKey = getEnv('OPENROUTER_API_KEY');
+  const aaKey =
+    options?.artificialAnalysisApiKey ?? getEnv('ARTIFICIAL_ANALYSIS_API_KEY');
+  const orKey = options?.openRouterApiKey ?? getEnv('OPENROUTER_API_KEY');
 
   if (aaKey) {
     try {
