@@ -64,6 +64,58 @@ describe('loadPluginConfig', () => {
     expect(config.scoringEngineVersion).toBe('v2-shadow');
   });
 
+  test('loads manual plan structure when configured', () => {
+    const projectDir = path.join(tempDir, 'project');
+    const projectConfigDir = path.join(projectDir, '.opencode');
+    fs.mkdirSync(projectConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectConfigDir, 'oh-my-opencode-slim.json'),
+      JSON.stringify({
+        manualPlan: {
+          orchestrator: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+          oracle: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+          designer: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+          explorer: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+          librarian: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+          fixer: {
+            primary: 'openai/gpt-5.3-codex',
+            fallback1: 'anthropic/claude-opus-4-6',
+            fallback2: 'chutes/kimi-k2.5',
+            fallback3: 'opencode/gpt-5-nano',
+          },
+        },
+      }),
+    );
+
+    const config = loadPluginConfig(projectDir);
+    expect(config.manualPlan?.oracle?.fallback3).toBe('opencode/gpt-5-nano');
+  });
+
   test('ignores invalid config (schema violation or malformed JSON)', () => {
     const projectDir = path.join(tempDir, 'project');
     const projectConfigDir = path.join(projectDir, '.opencode');
