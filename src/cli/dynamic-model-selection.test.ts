@@ -123,7 +123,7 @@ describe('dynamic-model-selection', () => {
       [m({ model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE' })],
       'fixer',
       {
-        'qwen/qwen3-coder-480b-a35b-instruct-fp8-tee': {
+        'qwen/qwen3-coder-480b-a35b-instruct': {
           source: 'artificial-analysis',
           qualityScore: 95,
           codingScore: 92,

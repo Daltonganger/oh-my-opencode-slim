@@ -4,6 +4,7 @@ export type ScoreFeatureName =
   | 'status'
   | 'context'
   | 'output'
+  | 'versionBonus'
   | 'reasoning'
   | 'toolcall'
   | 'attachment'

@@ -1,3 +1,4 @@
+import { buildModelKeyAliases } from './model-key-normalization';
 import { resolveAgentWithPrecedence } from './precedence-resolver';
 import { rankModelsV2 } from './scoring-v2';
 import type {
@@ -276,23 +277,7 @@ function geminiPreferenceAdjustment(
 }
 
 function modelLookupKeys(model: DiscoveredModel): string[] {
-  const fullKey = model.model.toLowerCase();
-  const slashIndex = model.model.indexOf('/');
-  const idKey =
-    slashIndex >= 0
-      ? model.model.slice(slashIndex + 1).toLowerCase()
-      : undefined;
-  const keys = new Set<string>();
-
-  keys.add(fullKey);
-  if (idKey) keys.add(idKey);
-
-  if (model.providerID === 'chutes' && idKey) {
-    keys.add(`chutes/${idKey}`);
-    keys.add(idKey.replace(/-(free|flash)$/i, ''));
-  }
-
-  return [...keys];
+  return buildModelKeyAliases(model.model);
 }
 
 function roleScore(

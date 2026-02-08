@@ -55,6 +55,14 @@ Deliverables:
 - Inputs: catalog + external signals (Artificial Analysis/OpenRouter).
 - Outputs: `totalScore` + `scoreBreakdown` per candidate.
 - Add feature flag: `scoringEngineVersion = v1 | v2-shadow | v2`.
+- Designer output rule in V2:
+  - `outputLimit >= 64000`: no output bonus
+  - `outputLimit < 64000`: `-10` output penalty
+- Canonical model-key normalization for signal matching:
+  - lowercase
+  - remove provider prefix (everything before first `/`)
+  - remove `TEE` and `FP*` tokens
+  - normalize spaces/underscores/slashes into hyphen aliases
 
 Acceptance criteria:
 - Deterministic scores for equal input.

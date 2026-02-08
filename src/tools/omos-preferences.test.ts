@@ -269,4 +269,59 @@ describe('omos-preferences helpers', () => {
       scores.fixer[1]?.totalScore ?? 0,
     );
   });
+
+  test('applies external signals in score-plan ranking', () => {
+    const plan = {
+      orchestrator: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+      oracle: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+      designer: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+      explorer: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+      librarian: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+      fixer: {
+        primary: 'zai-coding-plan/glm-4.7',
+        fallback1: 'openai/gpt-5.3-codex',
+        fallback2: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        fallback3: 'opencode/gpt-5-nano',
+      },
+    };
+
+    const signals = {
+      'zai-coding-plan/glm-4.7': {
+        source: 'artificial-analysis' as const,
+        qualityScore: 95,
+        codingScore: 95,
+      },
+    };
+
+    const scores = scoreManualPlan(plan, 'v1', signals);
+    const boosted = scores.fixer.find(
+      (row) => row.model === 'zai-coding-plan/glm-4.7',
+    );
+    expect((boosted?.breakdown?.externalSignalBoost ?? 0) > 0).toBe(true);
+  });
 });

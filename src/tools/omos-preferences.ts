@@ -7,10 +7,15 @@ import {
 } from '@opencode-ai/plugin';
 import { parseConfig, writeConfig } from '../cli/config-io';
 import { rankModelsV1WithBreakdown } from '../cli/dynamic-model-selection';
+import { fetchExternalModelSignals } from '../cli/external-rankings';
 import { getConfigDir } from '../cli/paths';
 import { resolveAgentWithPrecedence } from '../cli/precedence-resolver';
 import { rankModelsV2 } from '../cli/scoring-v2';
-import type { DiscoveredModel, ScoringEngineVersion } from '../cli/types';
+import type {
+  DiscoveredModel,
+  ExternalSignalMap,
+  ScoringEngineVersion,
+} from '../cli/types';
 import {
   type AgentOverrideConfig,
   loadPluginConfig,
@@ -202,6 +207,7 @@ function extractCandidateModels(plan: ManualPlan, agent: AgentName): string[] {
 export function scoreManualPlan(
   plan: ManualPlan,
   engine: ScoringEngineVersion,
+  externalSignals?: ExternalSignalMap,
 ): ScoreSummary {
   const summary = {} as ScoreSummary;
 
@@ -211,7 +217,11 @@ export function scoreManualPlan(
       .filter((m): m is DiscoveredModel => m !== null);
 
     if (engine === 'v2') {
-      summary[agent] = rankModelsV2(syntheticCatalog, agent).map((entry) => ({
+      summary[agent] = rankModelsV2(
+        syntheticCatalog,
+        agent,
+        externalSignals,
+      ).map((entry) => ({
         model: entry.model.model,
         totalScore: entry.totalScore,
         breakdown: {
@@ -221,22 +231,26 @@ export function scoreManualPlan(
       continue;
     }
 
-    const v1Rows = rankModelsV1WithBreakdown(syntheticCatalog, agent).map(
-      (entry) => ({
-        model: entry.model,
-        totalScore: entry.totalScore,
-        breakdown: {
-          baseScore: entry.baseScore,
-          externalSignalBoost: entry.externalSignalBoost,
-        },
-      }),
-    );
+    const v1Rows = rankModelsV1WithBreakdown(
+      syntheticCatalog,
+      agent,
+      externalSignals,
+    ).map((entry) => ({
+      model: entry.model,
+      totalScore: entry.totalScore,
+      breakdown: {
+        baseScore: entry.baseScore,
+        externalSignalBoost: entry.externalSignalBoost,
+      },
+    }));
 
     if (engine === 'v2-shadow') {
-      const v2Rows = rankModelsV2(syntheticCatalog, agent).map((entry) => ({
-        model: entry.model.model,
-        totalScore: entry.totalScore,
-      }));
+      const v2Rows = rankModelsV2(syntheticCatalog, agent, externalSignals).map(
+        (entry) => ({
+          model: entry.model.model,
+          totalScore: entry.totalScore,
+        }),
+      );
       summary[agent] = v1Rows.map((row) => {
         const v2 = v2Rows.find((candidate) => candidate.model === row.model);
         return {
@@ -433,9 +447,12 @@ Targets:
           (args.engine as ScoringEngineVersion | undefined) ??
           targetConfig.scoringEngineVersion ??
           'v1';
+        const { signals, warnings } = await fetchExternalModelSignals({});
         return stringify({
           engine,
-          scores: scoreManualPlan(parsed.data, engine),
+          signalCount: Object.keys(signals).length,
+          warnings,
+          scores: scoreManualPlan(parsed.data, engine, signals),
         });
       }
 

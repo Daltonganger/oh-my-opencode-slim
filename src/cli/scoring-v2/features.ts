@@ -1,3 +1,4 @@
+import { buildModelKeyAliases } from '../model-key-normalization';
 import type {
   DiscoveredModel,
   ExternalModelSignal,
@@ -6,15 +7,7 @@ import type {
 import type { FeatureVector, ScoringAgentName } from './types';
 
 function modelLookupKeys(model: DiscoveredModel): string[] {
-  const fullKey = model.model.toLowerCase();
-  const slashIndex = model.model.indexOf('/');
-  const idKey =
-    slashIndex >= 0
-      ? model.model.slice(slashIndex + 1).toLowerCase()
-      : undefined;
-  const keys = new Set<string>([fullKey]);
-  if (idKey) keys.add(idKey);
-  return [...keys];
+  return buildModelKeyAliases(model.model);
 }
 
 function findSignal(
@@ -35,7 +28,7 @@ function statusValue(status: DiscoveredModel['status']): number {
 }
 
 function capability(value: boolean): number {
-  return value ? 1 : -1;
+  return value ? 1 : 0;
 }
 
 function blendedPrice(signal: ExternalModelSignal | undefined): number {
@@ -49,6 +42,17 @@ function blendedPrice(signal: ExternalModelSignal | undefined): number {
   return signal.inputPricePer1M ?? signal.outputPricePer1M ?? 0;
 }
 
+function kimiVersionBonus(model: DiscoveredModel): number {
+  const lowered = `${model.model} ${model.name}`.toLowerCase();
+  const isKimiFamily =
+    model.providerID === 'chutes' ||
+    model.providerID === 'kimi-for-coding' ||
+    lowered.includes('kimi');
+
+  if (!isKimiFamily) return 0;
+  return lowered.includes('k2.5') ? 1 : 0;
+}
+
 export function extractFeatureVector(
   model: DiscoveredModel,
   agent: ScoringAgentName,
@@ -58,6 +62,8 @@ export function extractFeatureVector(
   const latency = signal?.latencySeconds ?? 0;
   const normalizedContext = Math.min(model.contextLimit, 1_000_000) / 100_000;
   const normalizedOutput = Math.min(model.outputLimit, 300_000) / 30_000;
+  const designerOutputScore = model.outputLimit < 64_000 ? -1 : 0;
+  const versionBonus = kimiVersionBonus(model);
   const quality = (signal?.qualityScore ?? 0) / 100;
   const coding = (signal?.codingScore ?? 0) / 100;
   const pricePenalty = Math.min(blendedPrice(signal), 50) / 10;
@@ -67,7 +73,8 @@ export function extractFeatureVector(
   return {
     status: statusValue(model.status),
     context: normalizedContext,
-    output: normalizedOutput,
+    output: agent === 'designer' ? designerOutputScore : normalizedOutput,
+    versionBonus,
     reasoning: capability(model.reasoning),
     toolcall: capability(model.toolcall),
     attachment: capability(model.attachment),
