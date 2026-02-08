@@ -7,7 +7,11 @@ import type { FeatureVector, ScoringAgentName } from './types';
 
 function modelLookupKeys(model: DiscoveredModel): string[] {
   const fullKey = model.model.toLowerCase();
-  const idKey = model.model.split('/')[1]?.toLowerCase();
+  const slashIndex = model.model.indexOf('/');
+  const idKey =
+    slashIndex >= 0
+      ? model.model.slice(slashIndex + 1).toLowerCase()
+      : undefined;
   const keys = new Set<string>([fullKey]);
   if (idKey) keys.add(idKey);
   return [...keys];

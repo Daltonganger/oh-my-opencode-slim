@@ -58,4 +58,21 @@ describe('scoring-v2', () => {
     expect(ranked[0]?.model.providerID).toBe('openai');
     expect(ranked[1]?.model.providerID).toBe('zai-coding-plan');
   });
+
+  test('matches external signals for multi-segment chutes ids', () => {
+    const candidate = model({
+      model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+    });
+    const signalMap: ExternalSignalMap = {
+      'qwen/qwen3-coder-480b-a35b-instruct-fp8-tee': {
+        source: 'artificial-analysis',
+        qualityScore: 95,
+        codingScore: 92,
+      },
+    };
+
+    const scored = scoreCandidateV2(candidate, 'fixer', signalMap);
+    expect(scored.scoreBreakdown.features.quality).toBe(0.95);
+    expect(scored.scoreBreakdown.features.coding).toBe(0.92);
+  });
 });

@@ -1,7 +1,10 @@
 /// <reference types="bun-types" />
 
 import { describe, expect, test } from 'bun:test';
-import { buildDynamicModelPlan } from './dynamic-model-selection';
+import {
+  buildDynamicModelPlan,
+  rankModelsV1WithBreakdown,
+} from './dynamic-model-selection';
 import type { DiscoveredModel, InstallConfig } from './types';
 
 function m(
@@ -113,5 +116,21 @@ describe('dynamic-model-selection', () => {
     expect(plan?.scoring?.engineVersionApplied).toBe('v1');
     expect(plan?.scoring?.shadowCompared).toBe(true);
     expect(plan?.scoring?.diffs?.oracle).toBeDefined();
+  });
+
+  test('matches external signals for multi-segment chutes ids in v1', () => {
+    const ranked = rankModelsV1WithBreakdown(
+      [m({ model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE' })],
+      'fixer',
+      {
+        'qwen/qwen3-coder-480b-a35b-instruct-fp8-tee': {
+          source: 'artificial-analysis',
+          qualityScore: 95,
+          codingScore: 92,
+        },
+      },
+    );
+
+    expect(ranked[0]?.externalSignalBoost).toBeGreaterThan(0);
   });
 });
