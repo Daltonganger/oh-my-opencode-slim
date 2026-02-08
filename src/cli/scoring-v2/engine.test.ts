@@ -121,4 +121,35 @@ describe('scoring-v2', () => {
     expect(ranked[0]?.model.model).toBe('chutes/moonshotai/Kimi-K2.5-TEE');
     expect(ranked[1]?.model.model).toBe('chutes/moonshotai/Kimi-K2-TEE');
   });
+
+  test('downranks chutes qwen3 against kimi/minimax priors', () => {
+    const ranked = rankModelsV2(
+      [
+        model({
+          model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+          contextLimit: 262144,
+          outputLimit: 262144,
+          reasoning: true,
+          toolcall: true,
+        }),
+        model({
+          model: 'chutes/moonshotai/Kimi-K2.5-TEE',
+          contextLimit: 262144,
+          outputLimit: 65535,
+          reasoning: true,
+          toolcall: true,
+        }),
+        model({
+          model: 'chutes/minimax-m2.1',
+          contextLimit: 500000,
+          outputLimit: 64000,
+          reasoning: true,
+          toolcall: true,
+        }),
+      ],
+      'fixer',
+    );
+
+    expect(ranked[0]?.model.model).not.toContain('Qwen3-Coder-480B');
+  });
 });

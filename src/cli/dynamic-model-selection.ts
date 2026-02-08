@@ -276,6 +276,49 @@ function geminiPreferenceAdjustment(
   return gemini3Boost + gemini25Penalty + antigravityNamingBonus;
 }
 
+function chutesPreferenceAdjustment(
+  agent: AgentName,
+  model: DiscoveredModel,
+): number {
+  if (model.providerID !== 'chutes') return 0;
+
+  const lowered = `${model.model} ${model.name}`.toLowerCase();
+  const isQwen3 = /qwen3/.test(lowered);
+  const isKimiK25 = /kimi-k2\.5|k2\.5/.test(lowered);
+  const isMinimaxM21 = /minimax[-_ ]?m2\.1/.test(lowered);
+
+  const qwenPenalty: Record<AgentName, number> = {
+    oracle: -12,
+    orchestrator: -10,
+    fixer: -22,
+    designer: -14,
+    librarian: -18,
+    explorer: -10,
+  };
+  const kimiBonus: Record<AgentName, number> = {
+    oracle: 0,
+    orchestrator: 0,
+    fixer: 8,
+    designer: 6,
+    librarian: 5,
+    explorer: 4,
+  };
+  const minimaxBonus: Record<AgentName, number> = {
+    oracle: 0,
+    orchestrator: 0,
+    fixer: 10,
+    designer: 3,
+    librarian: 9,
+    explorer: 12,
+  };
+
+  return (
+    (isQwen3 ? qwenPenalty[agent] : 0) +
+    (isKimiK25 ? kimiBonus[agent] : 0) +
+    (isMinimaxM21 ? minimaxBonus[agent] : 0)
+  );
+}
+
 function modelLookupKeys(model: DiscoveredModel): string[] {
   return buildModelKeyAliases(model.model);
 }
@@ -341,6 +384,7 @@ function roleScore(
                     ? -2
                     : 0;
   const geminiAdjustment = geminiPreferenceAdjustment(agent, model);
+  const chutesAdjustment = chutesPreferenceAdjustment(agent, model);
 
   if (agent === 'orchestrator') {
     const flashAdjustment = flash ? -22 : 0;
@@ -357,6 +401,7 @@ function roleScore(
       zaiAdjustment +
       nonReasoningFlashPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -374,6 +419,7 @@ function roleScore(
       zaiAdjustment +
       nonReasoningFlashPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -390,6 +436,7 @@ function roleScore(
       flashAdjustment +
       zaiAdjustment +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -407,6 +454,7 @@ function roleScore(
       zaiAdjustment +
       deepPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -422,6 +470,7 @@ function roleScore(
       flashAdjustment +
       zaiAdjustment +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -440,6 +489,7 @@ function roleScore(
     zaiAdjustment +
     nonReasoningFlashPenalty +
     geminiAdjustment +
+    chutesAdjustment +
     providerBias
   );
 }

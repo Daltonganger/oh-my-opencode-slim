@@ -4,7 +4,7 @@ const BASE_WEIGHTS: FeatureWeights = {
   status: 22,
   context: 6,
   output: 6,
-  versionBonus: 2,
+  versionBonus: 8,
   reasoning: 10,
   toolcall: 16,
   attachment: 2,

@@ -187,4 +187,30 @@ describe('dynamic-model-selection', () => {
 
     expect(ranked[0]?.externalSignalBoost).toBeGreaterThan(0);
   });
+
+  test('prefers chutes kimi/minimax over qwen3 in v1 role scoring', () => {
+    const catalog = [
+      m({
+        model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+        reasoning: true,
+        toolcall: true,
+      }),
+      m({
+        model: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        reasoning: true,
+        toolcall: true,
+      }),
+      m({
+        model: 'chutes/minimax-m2.1',
+        reasoning: true,
+        toolcall: true,
+      }),
+    ];
+
+    const fixer = rankModelsV1WithBreakdown(catalog, 'fixer');
+    const explorer = rankModelsV1WithBreakdown(catalog, 'explorer');
+
+    expect(fixer[0]?.model).not.toContain('Qwen3-Coder-480B');
+    expect(explorer[0]?.model).toContain('minimax-m2.1');
+  });
 });
