@@ -12,6 +12,7 @@ import {
   discoverProviderModels,
   fetchExternalModelSignals,
   generateLiteConfig,
+  getOpenCodePath,
   getOpenCodeVersion,
   isOpenCodeInstalled,
   pickBestCodingChutesModel,
@@ -84,6 +85,7 @@ function printWarning(message: string): void {
 async function checkOpenCodeInstalled(): Promise<{
   ok: boolean;
   version?: string;
+  path?: string;
 }> {
   const installed = await isOpenCodeInstalled();
   if (!installed) {
@@ -92,11 +94,18 @@ async function checkOpenCodeInstalled(): Promise<{
     console.log(
       `     ${BLUE}curl -fsSL https://opencode.ai/install | bash${RESET}`,
     );
+    console.log();
+    printInfo('Or if already installed, add it to your PATH:');
+    console.log(`     ${BLUE}export PATH="$HOME/.local/bin:$PATH"${RESET}`);
+    console.log(`     ${BLUE}export PATH="$HOME/.opencode/bin:$PATH"${RESET}`);
     return { ok: false };
   }
   const version = await getOpenCodeVersion();
-  printSuccess(`OpenCode ${version ?? ''} detected`);
-  return { ok: true, version: version ?? undefined };
+  const path = getOpenCodePath();
+  printSuccess(
+    `OpenCode ${version ?? ''} detected${path ? ` (${DIM}${path}${RESET})` : ''}`,
+  );
+  return { ok: true, version: version ?? undefined, path: path ?? undefined };
 }
 
 function handleStepResult(

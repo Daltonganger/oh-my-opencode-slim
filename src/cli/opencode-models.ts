@@ -1,3 +1,4 @@
+import { resolveOpenCodePath } from './system';
 import type { DiscoveredModel, OpenCodeFreeModel } from './types';
 
 interface OpenCodeModelVerboseRecord {
@@ -166,7 +167,8 @@ async function discoverModelsByProvider(
   error?: string;
 }> {
   try {
-    const proc = Bun.spawn(['opencode', 'models', '--refresh', '--verbose'], {
+    const opencodePath = resolveOpenCodePath();
+    const proc = Bun.spawn([opencodePath, 'models', '--refresh', '--verbose'], {
       stdout: 'pipe',
       stderr: 'pipe',
     });
@@ -198,7 +200,8 @@ export async function discoverModelCatalog(): Promise<{
   error?: string;
 }> {
   try {
-    const proc = Bun.spawn(['opencode', 'models', '--refresh', '--verbose'], {
+    const opencodePath = resolveOpenCodePath();
+    const proc = Bun.spawn([opencodePath, 'models', '--refresh', '--verbose'], {
       stdout: 'pipe',
       stderr: 'pipe',
     });
