@@ -45,6 +45,7 @@ function baseInstallConfig(): InstallConfig {
     hasTmux: false,
     installSkills: false,
     installCustomSkills: false,
+    setupMode: 'quick',
   };
 }
 
@@ -86,17 +87,19 @@ describe('dynamic-model-selection', () => {
       'oracle',
       'orchestrator',
     ]);
-    expect(agents.oracle?.model.startsWith('opencode/')).toBe(false);
-    expect(agents.orchestrator?.model.startsWith('opencode/')).toBe(false);
+    expect(agents.oracle?.model).toBe('chutes/kimi-k2.5');
+    expect(agents.orchestrator?.model).toBe('chutes/kimi-k2.5');
+    expect(agents.designer?.model).toBe('chutes/kimi-k2.5');
+    expect(agents.explorer?.model).toBe('chutes/minimax-m2.1');
+    expect(agents.librarian?.model).toBe('chutes/minimax-m2.1');
+    expect(agents.fixer?.model).toBe('chutes/minimax-m2.1');
     expect(chains.oracle.some((m: string) => m.startsWith('openai/'))).toBe(
       true,
     );
     expect(chains.orchestrator).toContain('chutes/kimi-k2.5');
     expect(chains.explorer).toContain('opencode/gpt-5-nano');
-    expect(chains.fixer[chains.fixer.length - 1]).toBe('opencode/gpt-5-nano');
-    expect(plan?.provenance?.oracle?.winnerLayer).toBe(
-      'dynamic-recommendation',
-    );
+    expect(chains.fixer[0]).toBe('chutes/minimax-m2.1');
+    expect(plan?.provenance?.oracle?.winnerLayer).toBe('manual-user-plan');
     expect(plan?.scoring?.engineVersionApplied).toBe('v1');
   });
 
@@ -167,9 +170,9 @@ describe('dynamic-model-selection', () => {
       {} as Record<string, number>,
     );
 
-    expect(usage.openai).toBe(2);
-    expect(usage['zai-coding-plan']).toBe(2);
-    expect(usage.chutes).toBe(2);
+    expect(usage.openai).toBeUndefined();
+    expect(usage['zai-coding-plan']).toBeUndefined();
+    expect(usage.chutes).toBe(6);
   });
 
   test('matches external signals for multi-segment chutes ids in v1', () => {

@@ -1,53 +1,59 @@
-const OPENCODE_PATHS = [
-  // PATH (try this first)
-  'opencode',
-  // User local installations (Linux & macOS)
-  `${process.env.HOME}/.local/bin/opencode`,
-  `${process.env.HOME}/.opencode/bin/opencode`,
-  `${process.env.HOME}/bin/opencode`,
-  // System-wide installations
-  '/usr/local/bin/opencode',
-  '/opt/opencode/bin/opencode',
-  '/usr/bin/opencode',
-  '/bin/opencode',
-  // macOS specific
-  '/Applications/OpenCode.app/Contents/MacOS/opencode',
-  `${process.env.HOME}/Applications/OpenCode.app/Contents/MacOS/opencode`,
-  // Homebrew (macOS & Linux)
-  '/opt/homebrew/bin/opencode',
-  '/home/linuxbrew/.linuxbrew/bin/opencode',
-  `${process.env.HOME}/homebrew/bin/opencode`,
-  // macOS user Library
-  `${process.env.HOME}/Library/Application Support/opencode/bin/opencode`,
-  // Snap (Linux)
-  '/snap/bin/opencode',
-  '/var/snap/opencode/current/bin/opencode',
-  // Flatpak (Linux)
-  '/var/lib/flatpak/exports/bin/ai.opencode.OpenCode',
-  `${process.env.HOME}/.local/share/flatpak/exports/bin/ai.opencode.OpenCode`,
-  // Nix (Linux/macOS)
-  '/nix/store/opencode/bin/opencode',
-  `${process.env.HOME}/.nix-profile/bin/opencode`,
-  '/run/current-system/sw/bin/opencode',
-  // Cargo (Rust toolchain)
-  `${process.env.HOME}/.cargo/bin/opencode`,
-  // npm/npx global
-  `${process.env.HOME}/.npm-global/bin/opencode`,
-  '/usr/local/lib/node_modules/opencode/bin/opencode',
-  // Yarn global
-  `${process.env.HOME}/.yarn/bin/opencode`,
-  // PNPM
-  `${process.env.HOME}/.pnpm-global/bin/opencode`,
-];
-
 let cachedOpenCodePath: string | null = null;
+
+function getOpenCodePaths(): string[] {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+
+  return [
+    // PATH (try this first)
+    'opencode',
+    // User local installations (Linux & macOS)
+    `${home}/.local/bin/opencode`,
+    `${home}/.opencode/bin/opencode`,
+    `${home}/bin/opencode`,
+    // System-wide installations
+    '/usr/local/bin/opencode',
+    '/opt/opencode/bin/opencode',
+    '/usr/bin/opencode',
+    '/bin/opencode',
+    // macOS specific
+    '/Applications/OpenCode.app/Contents/MacOS/opencode',
+    `${home}/Applications/OpenCode.app/Contents/MacOS/opencode`,
+    // Homebrew (macOS & Linux)
+    '/opt/homebrew/bin/opencode',
+    '/home/linuxbrew/.linuxbrew/bin/opencode',
+    `${home}/homebrew/bin/opencode`,
+    // macOS user Library
+    `${home}/Library/Application Support/opencode/bin/opencode`,
+    // Snap (Linux)
+    '/snap/bin/opencode',
+    '/var/snap/opencode/current/bin/opencode',
+    // Flatpak (Linux)
+    '/var/lib/flatpak/exports/bin/ai.opencode.OpenCode',
+    `${home}/.local/share/flatpak/exports/bin/ai.opencode.OpenCode`,
+    // Nix (Linux/macOS)
+    '/nix/store/opencode/bin/opencode',
+    `${home}/.nix-profile/bin/opencode`,
+    '/run/current-system/sw/bin/opencode',
+    // Cargo (Rust toolchain)
+    `${home}/.cargo/bin/opencode`,
+    // npm/npx global
+    `${home}/.npm-global/bin/opencode`,
+    '/usr/local/lib/node_modules/opencode/bin/opencode',
+    // Yarn global
+    `${home}/.yarn/bin/opencode`,
+    // PNPM
+    `${home}/.pnpm-global/bin/opencode`,
+  ];
+}
 
 export function resolveOpenCodePath(): string {
   if (cachedOpenCodePath) {
     return cachedOpenCodePath;
   }
 
-  for (const opencodePath of OPENCODE_PATHS) {
+  const paths = getOpenCodePaths();
+
+  for (const opencodePath of paths) {
     try {
       // Check if we can execute it
       const proc = Bun.spawn([opencodePath, '--version'], {
@@ -67,7 +73,9 @@ export function resolveOpenCodePath(): string {
 }
 
 export async function isOpenCodeInstalled(): Promise<boolean> {
-  for (const opencodePath of OPENCODE_PATHS) {
+  const paths = getOpenCodePaths();
+
+  for (const opencodePath of paths) {
     try {
       const proc = Bun.spawn([opencodePath, '--version'], {
         stdout: 'pipe',

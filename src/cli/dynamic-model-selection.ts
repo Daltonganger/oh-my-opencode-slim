@@ -966,9 +966,15 @@ export function buildDynamicModelPlan(
   ].reduce((acc, modelID) => ensureSyntheticModel(acc, modelID), catalog);
 
   const enabledProviders = new Set(getEnabledProviders(config));
-  const providerCandidates = catalogWithSelectedModels.filter((m) =>
-    enabledProviders.has(m.providerID),
-  );
+  const providerCandidates = catalogWithSelectedModels.filter((m) => {
+    if (!enabledProviders.has(m.providerID)) return false;
+
+    if (m.providerID === 'chutes' && /qwen/i.test(m.model)) {
+      return false;
+    }
+
+    return true;
+  });
   const versionRecencyMap = getVersionRecencyMap(providerCandidates);
 
   if (providerCandidates.length === 0) {
@@ -1009,6 +1015,18 @@ export function buildDynamicModelPlan(
   const agents: Record<string, { model: string; variant?: string }> = {};
   const chains: Record<string, string[]> = {};
   const provenance: DynamicModelPlan['provenance'] = {};
+  const lockedAgents = new Set<AgentName>();
+  const hasForcedSelections =
+    (config.hasChutes &&
+      Boolean(
+        config.selectedChutesPrimaryModel ||
+          config.selectedChutesSecondaryModel,
+      )) ||
+    (config.useOpenCodeFreeModels &&
+      Boolean(
+        config.selectedOpenCodePrimaryModel ||
+          config.selectedOpenCodeSecondaryModel,
+      ));
 
   const getRankedModels = (agent: AgentName): DiscoveredModel[] => {
     const cached = rankCache.get(agent);
@@ -1116,15 +1134,60 @@ export function buildDynamicModelPlan(
       systemDefault: [systemDefaultModel],
     });
 
+    let finalModel = resolved.model;
+    let finalChain = resolved.chain;
+
+    const selectedChutesForAgent =
+      agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
+        ? (config.selectedChutesSecondaryModel ??
+          config.selectedChutesPrimaryModel)
+        : config.selectedChutesPrimaryModel;
+
+    const selectedOpenCodeForAgent =
+      agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
+        ? (config.selectedOpenCodeSecondaryModel ??
+          config.selectedOpenCodePrimaryModel)
+        : config.selectedOpenCodePrimaryModel;
+
+    const hasChutesSelection =
+      config.hasChutes && Boolean(selectedChutesForAgent);
+    const hasOpenCodeSelection =
+      config.useOpenCodeFreeModels && Boolean(selectedOpenCodeForAgent);
+
+    if (hasOpenCodeSelection && selectedOpenCodeForAgent) {
+      finalModel = selectedOpenCodeForAgent;
+      finalChain = dedupe([selectedOpenCodeForAgent, ...finalChain]);
+    }
+
+    if (hasChutesSelection && selectedChutesForAgent) {
+      finalModel = selectedChutesForAgent;
+      finalChain = dedupe([selectedChutesForAgent, ...finalChain]);
+    }
+
+    const wasForced =
+      (hasChutesSelection && selectedChutesForAgent === finalModel) ||
+      (hasOpenCodeSelection &&
+        selectedOpenCodeForAgent === finalModel &&
+        !hasChutesSelection);
+
+    if (wasForced) {
+      lockedAgents.add(agent);
+    }
+
     agents[agent] = {
-      model: resolved.model,
+      model: finalModel,
       variant: ROLE_VARIANT[agent],
     };
-    chains[agent] = resolved.chain;
-    provenance[agent] = resolved.provenance;
+    chains[agent] = finalChain;
+    provenance[agent] = {
+      winnerLayer: wasForced
+        ? 'manual-user-plan'
+        : resolved.provenance.winnerLayer,
+      winnerModel: finalModel,
+    };
   }
 
-  if (hasPaidProviderEnabled) {
+  if (hasPaidProviderEnabled && !hasForcedSelections) {
     for (const providerID of paidProviders) {
       if ((providerUsage.get(providerID) ?? 0) > 0) continue;
 
@@ -1138,7 +1201,7 @@ export function buildDynamicModelPlan(
 
       for (const agent of PRIMARY_ASSIGNMENT_ORDER) {
         const currentModel = agents[agent]?.model;
-        if (!currentModel) continue;
+        if (!currentModel || lockedAgents.has(agent)) continue;
 
         const ranked = getRankedModels(agent);
         const candidate = ranked.find(
@@ -1192,7 +1255,11 @@ export function buildDynamicModelPlan(
     }
   }
 
-  if (config.balanceProviderUsage && hasPaidProviderEnabled) {
+  if (
+    config.balanceProviderUsage &&
+    hasPaidProviderEnabled &&
+    !hasForcedSelections
+  ) {
     rebalanceForSubscriptionMode(
       agents,
       chains,
