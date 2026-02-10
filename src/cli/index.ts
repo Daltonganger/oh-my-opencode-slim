@@ -32,6 +32,10 @@ function parseArgs(args: string[]): InstallArgs {
       result.opencodeFree = arg.split('=')[1] as BooleanArg;
     } else if (arg.startsWith('--opencode-free-model=')) {
       result.opencodeFreeModel = arg.split('=')[1];
+    } else if (arg.startsWith('--aa-key=')) {
+      result.aaKey = arg.slice('--aa-key='.length);
+    } else if (arg.startsWith('--openrouter-key=')) {
+      result.openrouterKey = arg.slice('--openrouter-key='.length);
     } else if (arg === '-h' || arg === '--help') {
       printHelp();
       process.exit(0);
@@ -57,6 +61,8 @@ Options:
   --chutes=yes|no        Chutes models (yes/no)
   --opencode-free=yes|no Use OpenCode free models (opencode/*)
   --opencode-free-model  Preferred OpenCode model id or "auto"
+  --aa-key               Artificial Analysis API key (optional)
+  --openrouter-key       OpenRouter API key (optional)
   --tmux=yes|no          Enable tmux integration (yes/no)
   --skills=yes|no        Install recommended skills (yes/no)
   --no-tui               Non-interactive mode (requires all flags)
@@ -64,7 +70,7 @@ Options:
 
 Examples:
   bunx oh-my-opencode-slim install
-  bunx oh-my-opencode-slim install --no-tui --kimi=yes --openai=yes --anthropic=yes --copilot=no --zai-plan=no --antigravity=yes --chutes=no --opencode-free=yes --opencode-free-model=auto --tmux=no --skills=yes
+  bunx oh-my-opencode-slim install --no-tui --kimi=yes --openai=yes --anthropic=yes --copilot=no --zai-plan=no --antigravity=yes --chutes=no --opencode-free=yes --opencode-free-model=auto --aa-key=YOUR_AA_KEY --openrouter-key=YOUR_OR_KEY --tmux=no --skills=yes
 `);
 }
 
