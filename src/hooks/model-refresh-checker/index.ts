@@ -107,7 +107,7 @@ function inferOpenCodeFreeEnabled(input: {
     },
   );
 
-  return hasExplicitOpenCodeAgent || input.hasOpencodeZen;
+  return hasExplicitOpenCodeAgent;
 }
 
 function applyDynamicPlan(

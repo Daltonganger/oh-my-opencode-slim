@@ -1646,7 +1646,6 @@ async function runInstall(config: InstallConfig): Promise<number> {
       const providerScopedCatalog = filterCatalogToEnabledProviders(
         catalogDiscovery.models,
         resolvedConfig,
-        signals,
       );
 
       if (providerScopedCatalog.length === 0) {
