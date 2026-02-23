@@ -262,8 +262,8 @@ export function addGoogleProvider(): ConfigMergeResult {
 
     providers.google = {
       models: {
-        'antigravity-gemini-3-pro': {
-          name: 'Gemini 3 Pro (Antigravity)',
+        'antigravity-gemini-3.1-pro': {
+          name: 'Gemini 3.1 Pro (Antigravity)',
           limit: { context: 1048576, output: 65535 },
           modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
           variants: {
@@ -320,8 +320,8 @@ export function addGoogleProvider(): ConfigMergeResult {
           limit: { context: 1048576, output: 65536 },
           modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
         },
-        'gemini-3-pro-preview': {
-          name: 'Gemini 3 Pro Preview (Gemini CLI)',
+        'gemini-3.1-pro-preview': {
+          name: 'Gemini 3.1 Pro Preview (Gemini CLI)',
           limit: { context: 1048576, output: 65535 },
           modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
         },
@@ -343,7 +343,9 @@ export function addGoogleProvider(): ConfigMergeResult {
 export function addChutesProvider(): ConfigMergeResult {
   const configPath = getExistingConfigPath();
   try {
-    const { config: parsedConfig, error } = parseConfig(configPath);
+    // Chutes now follows the OpenCode auth flow (same as other providers).
+    // Keep this step as a no-op success for backward-compatible install output.
+    const { error } = parseConfig(configPath);
     if (error) {
       return {
         success: false,
@@ -351,26 +353,12 @@ export function addChutesProvider(): ConfigMergeResult {
         error: `Failed to parse config: ${error}`,
       };
     }
-    const config = parsedConfig ?? {};
-    const providers = (config.provider ?? {}) as Record<string, unknown>;
-
-    providers.chutes = {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'Chutes',
-      options: {
-        baseURL: 'https://llm.chutes.ai/v1',
-        apiKey: '{env:CHUTES_API_KEY}',
-      },
-    };
-    config.provider = providers;
-
-    writeConfig(configPath, config);
     return { success: true, configPath };
   } catch (err) {
     return {
       success: false,
       configPath,
-      error: `Failed to add chutes provider: ${err}`,
+      error: `Failed to validate chutes provider config: ${err}`,
     };
   }
 }
@@ -396,6 +384,7 @@ export function detectCurrentConfig(): DetectedConfig {
     hasZaiPlan: false,
     hasAntigravity: false,
     hasChutes: false,
+    hasNanoGpt: false,
     hasOpencodeZen: false,
     hasTmux: false,
   };
@@ -416,6 +405,7 @@ export function detectCurrentConfig(): DetectedConfig {
   result.hasCopilot = !!providers?.['github-copilot'];
   result.hasZaiPlan = !!providers?.['zai-coding-plan'];
   result.hasChutes = !!providers?.chutes;
+  result.hasNanoGpt = !!providers?.nanogpt;
   if (providers?.google) result.hasAntigravity = true;
 
   // Try to detect from lite config
@@ -442,6 +432,9 @@ export function detectCurrentConfig(): DetectedConfig {
       }
       if (models.some((m) => m?.startsWith('chutes/'))) {
         result.hasChutes = true;
+      }
+      if (models.some((m) => m?.startsWith('nanogpt/'))) {
+        result.hasNanoGpt = true;
       }
     }
 

@@ -64,6 +64,21 @@ describe('loadPluginConfig', () => {
     expect(config.scoringEngineVersion).toBe('v2-shadow');
   });
 
+  test('loads balanceProviderUsage flag when configured', () => {
+    const projectDir = path.join(tempDir, 'project');
+    const projectConfigDir = path.join(projectDir, '.opencode');
+    fs.mkdirSync(projectConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectConfigDir, 'oh-my-opencode-slim.json'),
+      JSON.stringify({
+        balanceProviderUsage: true,
+      }),
+    );
+
+    const config = loadPluginConfig(projectDir);
+    expect(config.balanceProviderUsage).toBe(true);
+  });
+
   test('loads manual plan structure when configured', () => {
     const projectDir = path.join(tempDir, 'project');
     const projectConfigDir = path.join(projectDir, '.opencode');
@@ -81,7 +96,7 @@ describe('loadPluginConfig', () => {
           oracle: {
             primary: 'openai/gpt-5.3-codex',
             fallback1: 'anthropic/claude-opus-4-6',
-            fallback2: 'chutes/kimi-k2.5',
+            fallback2: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
             fallback3: 'opencode/gpt-5-nano',
           },
           designer: {
@@ -113,7 +128,9 @@ describe('loadPluginConfig', () => {
     );
 
     const config = loadPluginConfig(projectDir);
-    expect(config.manualPlan?.oracle?.fallback3).toBe('opencode/gpt-5-nano');
+    expect(config.manualPlan?.oracle?.fallback2).toBe(
+      'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+    );
   });
 
   test('ignores invalid config (schema violation or malformed JSON)', () => {

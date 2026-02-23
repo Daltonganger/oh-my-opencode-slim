@@ -20,7 +20,10 @@ const MANUAL_AGENT_NAMES = [
 
 const ProviderModelIdSchema = z
   .string()
-  .regex(/^[^/\s]+\/[^/\s]+$/, 'Expected provider/model format');
+  .regex(
+    /^[^/\s]+\/[^\s]+$/,
+    'Expected provider/model format (provider/.../model)',
+  );
 
 export const ManualAgentPlanSchema = z
   .object({
@@ -122,16 +125,46 @@ export type BackgroundTaskConfig = z.infer<typeof BackgroundTaskConfigSchema>;
 
 export const FailoverConfigSchema = z.object({
   enabled: z.boolean().default(true),
-  timeoutMs: z.number().min(1000).max(120000).default(15000),
+  timeoutMs: z.number().min(0).default(15000),
   chains: FallbackChainsSchema.default({}),
 });
 
 export type FailoverConfig = z.infer<typeof FailoverConfigSchema>;
 
+export const ModelRefreshConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  interval_hours: z
+    .number()
+    .min(1)
+    .max(24 * 30)
+    .default(24),
+  show_toast: z.boolean().default(false),
+});
+
+export type ModelRefreshConfig = z.infer<typeof ModelRefreshConfigSchema>;
+
+const ModelPreferenceListSchema = z.array(ProviderModelIdSchema).min(1);
+
+export const ModelPreferencesConfigSchema = z
+  .object({
+    orchestrator: ModelPreferenceListSchema.optional(),
+    oracle: ModelPreferenceListSchema.optional(),
+    designer: ModelPreferenceListSchema.optional(),
+    explorer: ModelPreferenceListSchema.optional(),
+    librarian: ModelPreferenceListSchema.optional(),
+    fixer: ModelPreferenceListSchema.optional(),
+  })
+  .strict();
+
+export type ModelPreferencesConfig = z.infer<
+  typeof ModelPreferencesConfigSchema
+>;
+
 // Main plugin config
 export const PluginConfigSchema = z.object({
   preset: z.string().optional(),
   scoringEngineVersion: z.enum(['v1', 'v2-shadow', 'v2']).optional(),
+  balanceProviderUsage: z.boolean().optional(),
   manualPlan: ManualPlanSchema.optional(),
   presets: z.record(z.string(), PresetSchema).optional(),
   agents: z.record(z.string(), AgentOverrideConfigSchema).optional(),
@@ -139,6 +172,9 @@ export const PluginConfigSchema = z.object({
   tmux: TmuxConfigSchema.optional(),
   background: BackgroundTaskConfigSchema.optional(),
   fallback: FailoverConfigSchema.optional(),
+  model_refresh: ModelRefreshConfigSchema.optional(),
+  model_preferences: ModelPreferencesConfigSchema.optional(),
+  modelPreferences: ModelPreferencesConfigSchema.optional(),
 });
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;

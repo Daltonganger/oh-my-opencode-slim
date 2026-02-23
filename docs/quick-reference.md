@@ -105,14 +105,14 @@ opencode auth login
 
 **Available Models:**
 - `google/antigravity-gemini-3-flash`
-- `google/antigravity-gemini-3-pro`
+- `google/antigravity-gemini-3.1-pro`
 - `google/antigravity-claude-sonnet-4-5`
 - `google/antigravity-claude-sonnet-4-5-thinking`
 - `google/antigravity-claude-opus-4-5-thinking`
 - `google/gemini-2.5-flash` (Gemini CLI)
 - `google/gemini-2.5-pro` (Gemini CLI)
 - `google/gemini-3-flash-preview` (Gemini CLI)
-- `google/gemini-3-pro-preview` (Gemini CLI)
+- `google/gemini-3.1-pro-preview` (Gemini CLI)
 
 ### Author's Preset
 
@@ -497,6 +497,10 @@ The installer generates this file based on your providers. You can manually cust
 | `tmux.enabled` | boolean | `false` | Enable tmux pane spawning for sub-agents |
 | `tmux.layout` | string | `"main-vertical"` | Layout preset: `main-vertical`, `main-horizontal`, `tiled`, `even-horizontal`, `even-vertical` |
 | `tmux.main_pane_size` | number | `60` | Main pane size as percentage (20-80) |
+| `model_refresh.enabled` | boolean | `true` | Enable startup model refresh check |
+| `model_refresh.interval_hours` | number | `24` | Minimum hours between automatic refresh runs |
+| `model_refresh.show_toast` | boolean | `false` | Show a toast after automatic model refresh |
+| `modelPreferences.<agent>` | string[] | unset | Ordered model preference list per agent (`orchestrator`,`oracle`,`designer`,`explorer`,`librarian`,`fixer`) |
 | `disabled_mcps` | string[] | `[]` | MCP server IDs to disable globally (e.g., `"websearch"`) |
 
 > **Note:** Agent configuration should be defined within `presets`. The root-level `agents` field is deprecated.

@@ -1,3 +1,4 @@
+import { buildModelKeyAliases } from './model-key-normalization';
 import type { ExternalModelSignal, ExternalSignalMap } from './types';
 
 interface ArtificialAnalysisResponse {
@@ -37,16 +38,7 @@ function normalizeKey(input: string): string {
 }
 
 function baseAliases(key: string): string[] {
-  const normalized = normalizeKey(key);
-  const aliases = new Set<string>([normalized]);
-  const slashIndex = normalized.indexOf('/');
-  const idPart =
-    slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-
-  aliases.add(idPart);
-  aliases.add(idPart.replace(/-(free|flash)$/i, ''));
-
-  return [...aliases];
+  return buildModelKeyAliases(normalizeKey(key));
 }
 
 function providerScopedAlias(alias: string, providerPrefix?: string): string {

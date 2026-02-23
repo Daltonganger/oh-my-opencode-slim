@@ -1,5 +1,8 @@
+import { buildModelKeyAliases } from './model-key-normalization';
+import { resolvePreferredModelForAgent } from './model-preferences';
 import { resolveAgentWithPrecedence } from './precedence-resolver';
-import { rankModelsV2 } from './scoring-v2';
+import { rankModelsV2, scoreCandidateV2 } from './scoring-v2';
+import { scoreRoutingCandidate } from './smart-routing-v3/scoring';
 import type {
   DiscoveredModel,
   DynamicModelPlan,
@@ -18,6 +21,13 @@ const AGENTS = [
 ] as const;
 
 type AgentName = (typeof AGENTS)[number];
+
+export type V1RankedScore = {
+  model: string;
+  totalScore: number;
+  baseScore: number;
+  externalSignalBoost: number;
+};
 
 const FREE_BIASED_PROVIDERS = new Set(['opencode']);
 const PRIMARY_ASSIGNMENT_ORDER: AgentName[] = [
@@ -38,7 +48,7 @@ const ROLE_VARIANT: Record<AgentName, string | undefined> = {
   fixer: 'low',
 };
 
-function getEnabledProviders(config: InstallConfig): string[] {
+export function getEnabledProviders(config: InstallConfig): string[] {
   const providers: string[] = [];
   if (config.hasOpenAI) providers.push('openai');
   if (config.hasAnthropic) providers.push('anthropic');
@@ -47,8 +57,79 @@ function getEnabledProviders(config: InstallConfig): string[] {
   if (config.hasKimi) providers.push('kimi-for-coding');
   if (config.hasAntigravity) providers.push('google');
   if (config.hasChutes) providers.push('chutes');
+  if (config.hasNanoGpt) providers.push('nanogpt');
   if (config.useOpenCodeFreeModels) providers.push('opencode');
   return providers;
+}
+
+export function filterCatalogToEnabledProviders(
+  catalog: DiscoveredModel[],
+  config: InstallConfig,
+): DiscoveredModel[] {
+  const enabledProviders = new Set(getEnabledProviders(config));
+  const preferredNanoCatalog =
+    config.availableNanoGptModels?.filter(
+      (model) => model.providerID === 'nanogpt',
+    ) ?? [];
+  const nanoAllowlistFromPolicy = (() => {
+    if (config.nanoGptRoutingPolicy === 'subscription-only') {
+      return config.nanoGptSubscriptionModels ?? [];
+    }
+    if (config.nanoGptRoutingPolicy === 'paygo-only') {
+      return config.nanoGptPaidModels ?? [];
+    }
+    return [
+      ...(config.nanoGptSubscriptionModels ?? []),
+      ...(config.nanoGptPaidModels ?? []),
+    ];
+  })();
+  const nanoAllowlist =
+    preferredNanoCatalog.length > 0
+      ? new Set(preferredNanoCatalog.map((model) => model.model.toLowerCase()))
+      : nanoAllowlistFromPolicy.length > 0
+        ? new Set(nanoAllowlistFromPolicy.map((model) => model.toLowerCase()))
+        : null;
+  const nanoAccessByModel = new Map(
+    preferredNanoCatalog.map((model) => [
+      model.model.toLowerCase(),
+      model.nanoGptAccess,
+    ]),
+  );
+  for (const model of config.nanoGptSubscriptionModels ?? []) {
+    if (!nanoAccessByModel.has(model.toLowerCase())) {
+      nanoAccessByModel.set(model.toLowerCase(), 'subscription');
+    }
+  }
+  for (const model of config.nanoGptPaidModels ?? []) {
+    if (!nanoAccessByModel.has(model.toLowerCase())) {
+      nanoAccessByModel.set(model.toLowerCase(), 'paid');
+    }
+  }
+
+  return catalog.flatMap((model) => {
+    if (!enabledProviders.has(model.providerID)) return [];
+    if (model.providerID === 'chutes' && /qwen/i.test(model.model)) {
+      return [];
+    }
+
+    if (model.providerID !== 'nanogpt') {
+      return [model];
+    }
+
+    const key = model.model.toLowerCase();
+    if (nanoAllowlist && !nanoAllowlist.has(key)) {
+      return [];
+    }
+
+    const access = nanoAccessByModel.get(key);
+    if (!access) return [model];
+    return [
+      {
+        ...model,
+        nanoGptAccess: access,
+      },
+    ];
+  });
 }
 
 function tokenScore(name: string, re: RegExp, points: number): number {
@@ -242,46 +323,76 @@ function isKimiK25Model(model: DiscoveredModel): boolean {
 }
 
 function geminiPreferenceAdjustment(
-  agent: AgentName,
+  _agent: AgentName,
   model: DiscoveredModel,
 ): number {
   const lowered = `${model.model} ${model.name}`.toLowerCase();
-  const isGemini3Pro = /gemini-3-pro|gemini-3\.0-pro|gemini-3-pro-preview/.test(
-    lowered,
-  );
+  const isGemini3 = /gemini[-_ ]?3/.test(lowered);
+  const isGemini25Flash = /gemini-2\.5-flash/.test(lowered);
   const isGemini25Pro = /gemini-2\.5-pro/.test(lowered);
-  const antigravityNamingBonus =
-    model.providerID === 'google' && lowered.includes('antigravity-') ? 4 : 0;
 
-  const deepRoleBoost =
-    agent === 'oracle' ||
-    agent === 'orchestrator' ||
-    agent === 'fixer' ||
-    agent === 'librarian' ||
-    agent === 'designer'
-      ? 24
-      : 8;
+  return (
+    (isGemini3 ? 26 : 0) +
+    (isGemini25Flash ? -12 : 0) +
+    (isGemini25Pro ? -14 : 0)
+  );
+}
 
-  const gemini3Boost = isGemini3Pro ? deepRoleBoost : 0;
-  const gemini25Penalty = isGemini25Pro && !isGemini3Pro ? -14 : 0;
+function chutesPreferenceAdjustment(
+  agent: AgentName,
+  model: DiscoveredModel,
+): number {
+  if (model.providerID !== 'chutes') return 0;
 
-  return gemini3Boost + gemini25Penalty + antigravityNamingBonus;
+  const lowered = `${model.model} ${model.name}`.toLowerCase();
+  const isQwen3 = /qwen3/.test(lowered);
+  const isKimiK25 = /kimi-k2\.5|k2\.5/.test(lowered);
+  const isMinimaxM25 = /minimax[-_ ]?m2\.5/.test(lowered);
+  const isGlm5 = /glm[-_ ]?5/.test(lowered);
+
+  const qwenPenalty: Record<AgentName, number> = {
+    oracle: -12,
+    orchestrator: -10,
+    fixer: -22,
+    designer: -14,
+    librarian: -18,
+    explorer: -10,
+  };
+  const kimiBonus: Record<AgentName, number> = {
+    oracle: 0,
+    orchestrator: 0,
+    fixer: 8,
+    designer: 6,
+    librarian: 5,
+    explorer: 4,
+  };
+  const minimaxBonus: Record<AgentName, number> = {
+    oracle: 8,
+    orchestrator: 10,
+    fixer: 18,
+    designer: 8,
+    librarian: 14,
+    explorer: 22,
+  };
+  const glm5Bonus: Record<AgentName, number> = {
+    oracle: 18,
+    orchestrator: 16,
+    fixer: 12,
+    designer: 10,
+    librarian: 12,
+    explorer: 4,
+  };
+
+  return (
+    (isQwen3 ? qwenPenalty[agent] : 0) +
+    (isKimiK25 ? kimiBonus[agent] : 0) +
+    (isMinimaxM25 ? minimaxBonus[agent] : 0) +
+    (isGlm5 ? glm5Bonus[agent] : 0)
+  );
 }
 
 function modelLookupKeys(model: DiscoveredModel): string[] {
-  const fullKey = model.model.toLowerCase();
-  const idKey = model.model.split('/')[1]?.toLowerCase();
-  const keys = new Set<string>();
-
-  keys.add(fullKey);
-  if (idKey) keys.add(idKey);
-
-  if (model.providerID === 'chutes' && idKey) {
-    keys.add(`chutes/${idKey}`);
-    keys.add(idKey.replace(/-(free|flash)$/i, ''));
-  }
-
-  return [...keys];
+  return buildModelKeyAliases(model.model);
 }
 
 function roleScore(
@@ -345,6 +456,7 @@ function roleScore(
                     ? -2
                     : 0;
   const geminiAdjustment = geminiPreferenceAdjustment(agent, model);
+  const chutesAdjustment = chutesPreferenceAdjustment(agent, model);
 
   if (agent === 'orchestrator') {
     const flashAdjustment = flash ? -22 : 0;
@@ -361,6 +473,7 @@ function roleScore(
       zaiAdjustment +
       nonReasoningFlashPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -378,6 +491,7 @@ function roleScore(
       zaiAdjustment +
       nonReasoningFlashPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -394,6 +508,7 @@ function roleScore(
       flashAdjustment +
       zaiAdjustment +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -411,6 +526,7 @@ function roleScore(
       zaiAdjustment +
       deepPenalty +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -426,6 +542,7 @@ function roleScore(
       flashAdjustment +
       zaiAdjustment +
       geminiAdjustment +
+      chutesAdjustment +
       providerBias
     );
   }
@@ -444,6 +561,7 @@ function roleScore(
     zaiAdjustment +
     nonReasoningFlashPenalty +
     geminiAdjustment +
+    chutesAdjustment +
     providerBias
   );
 }
@@ -525,6 +643,29 @@ function rankModels(
   });
 }
 
+export function rankModelsV1WithBreakdown(
+  models: DiscoveredModel[],
+  agent: AgentName,
+  externalSignals?: ExternalSignalMap,
+): V1RankedScore[] {
+  const versionRecencyMap = getVersionRecencyMap(models);
+  return [...models]
+    .map((model) => {
+      const base = roleScore(agent, model, versionRecencyMap[model.model] ?? 0);
+      const boost = getExternalSignalBoost(agent, model, externalSignals);
+      return {
+        model: model.model,
+        baseScore: Math.round(base * 1000) / 1000,
+        externalSignalBoost: Math.round(boost * 1000) / 1000,
+        totalScore: Math.round((base + boost) * 1000) / 1000,
+      };
+    })
+    .sort((a, b) => {
+      if (a.totalScore !== b.totalScore) return b.totalScore - a.totalScore;
+      return a.model.localeCompare(b.model);
+    });
+}
+
 function combinedScore(
   agent: AgentName,
   model: DiscoveredModel,
@@ -535,6 +676,214 @@ function combinedScore(
     roleScore(agent, model, versionRecencyMap?.[model.model] ?? 0) +
     getExternalSignalBoost(agent, model, externalSignals)
   );
+}
+
+function effectiveEngine(
+  engineVersion: ScoringEngineVersion,
+): 'v1' | 'v2' | 'v3' {
+  if (engineVersion === 'v2') return 'v2';
+  if (engineVersion === 'v3') return 'v3';
+  return 'v1';
+}
+
+function scoreForEngine(
+  engineVersion: ScoringEngineVersion,
+  agent: AgentName,
+  model: DiscoveredModel,
+  externalSignals: ExternalSignalMap | undefined,
+  versionRecencyMap: Record<string, number>,
+): number {
+  if (effectiveEngine(engineVersion) === 'v2') {
+    return scoreCandidateV2(model, agent, externalSignals).totalScore;
+  }
+
+  if (effectiveEngine(engineVersion) === 'v3') {
+    return scoreRoutingCandidate(model, agent, {
+      policy: {
+        mode: 'hybrid',
+        subscriptionBudget: {
+          enforcement: 'soft',
+        },
+      },
+      quotaStatus: {
+        dailyRemaining: 999,
+        monthlyRemaining: 9_999,
+        lastCheckedAt: new Date(0),
+      },
+      providerUsage: new Map<string, number>(),
+      externalSignals,
+    }).totalScore;
+  }
+
+  return combinedScore(agent, model, externalSignals, versionRecencyMap);
+}
+
+function selectTopModelsPerProvider(
+  models: DiscoveredModel[],
+  engineVersion: ScoringEngineVersion,
+  externalSignals: ExternalSignalMap | undefined,
+  versionRecencyMap: Record<string, number>,
+): DiscoveredModel[] {
+  const byProvider = new Map<string, DiscoveredModel[]>();
+
+  for (const model of models) {
+    const current = byProvider.get(model.providerID) ?? [];
+    current.push(model);
+    byProvider.set(model.providerID, current);
+  }
+
+  const selected: DiscoveredModel[] = [];
+
+  for (const providerModels of byProvider.values()) {
+    if (providerModels.length <= 2) {
+      selected.push(...providerModels);
+      continue;
+    }
+
+    const ranked = [...providerModels]
+      .map((model) => {
+        const total = AGENTS.reduce((sum, agent) => {
+          return (
+            sum +
+            scoreForEngine(
+              engineVersion,
+              agent,
+              model,
+              externalSignals,
+              versionRecencyMap,
+            )
+          );
+        }, 0);
+
+        return {
+          model,
+          score: total / AGENTS.length,
+        };
+      })
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        return a.model.model.localeCompare(b.model.model);
+      })
+      .slice(0, 2)
+      .map((entry) => entry.model);
+
+    selected.push(...ranked);
+  }
+
+  return selected;
+}
+
+function countProviderUsage(
+  agents: Record<string, { model: string; variant?: string }>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const assignment of Object.values(agents)) {
+    const provider = assignment.model.split('/')[0];
+    if (!provider) continue;
+    counts.set(provider, (counts.get(provider) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function rebalanceForSubscriptionMode(
+  agents: Record<string, { model: string; variant?: string }>,
+  chains: Record<string, string[]>,
+  provenance: Record<string, { winnerLayer: string; winnerModel: string }>,
+  paidProviders: string[],
+  getRankedModels: (agent: AgentName) => DiscoveredModel[],
+  getPinnedModelForProvider: (
+    agent: AgentName,
+    providerID: string,
+  ) => string | undefined,
+  targetByProvider: Record<string, number>,
+  externalSignals: ExternalSignalMap | undefined,
+  versionRecencyMap: Record<string, number>,
+  engineVersion: ScoringEngineVersion,
+): void {
+  if (paidProviders.length <= 1) return;
+
+  const MAX_ALLOWED_SCORE_LOSS = 20;
+
+  while (true) {
+    const providerUsage = countProviderUsage(agents);
+    const underProviders = paidProviders.filter(
+      (providerID) =>
+        (providerUsage.get(providerID) ?? 0) <
+        (targetByProvider[providerID] ?? 0),
+    );
+    const overProviders = paidProviders.filter(
+      (providerID) =>
+        (providerUsage.get(providerID) ?? 0) >
+        (targetByProvider[providerID] ?? 0),
+    );
+
+    if (underProviders.length === 0 || overProviders.length === 0) break;
+
+    let bestSwap:
+      | {
+          agent: AgentName;
+          candidate: DiscoveredModel;
+          loss: number;
+        }
+      | undefined;
+
+    for (const agent of PRIMARY_ASSIGNMENT_ORDER) {
+      const currentModelID = agents[agent]?.model;
+      if (!currentModelID) continue;
+
+      const currentProvider = currentModelID.split('/')[0];
+      if (!currentProvider || !overProviders.includes(currentProvider))
+        continue;
+
+      const ranked = getRankedModels(agent);
+      const currentModel =
+        ranked.find((model) => model.model === currentModelID) ??
+        ranked.find((model) => model.providerID === currentProvider);
+      if (!currentModel) continue;
+
+      const currentScore = scoreForEngine(
+        engineVersion,
+        agent,
+        currentModel,
+        externalSignals,
+        versionRecencyMap,
+      );
+
+      for (const underProvider of underProviders) {
+        const pinned = getPinnedModelForProvider(agent, underProvider);
+        const candidate =
+          ranked.find((model) => model.model === pinned) ??
+          ranked.find((model) => model.providerID === underProvider);
+        if (!candidate) continue;
+
+        const candidateScore = scoreForEngine(
+          engineVersion,
+          agent,
+          candidate,
+          externalSignals,
+          versionRecencyMap,
+        );
+        const loss = currentScore - candidateScore;
+
+        if (loss > MAX_ALLOWED_SCORE_LOSS) continue;
+        if (!bestSwap || loss < bestSwap.loss) {
+          bestSwap = { agent, candidate, loss };
+        }
+      }
+    }
+
+    if (!bestSwap) break;
+
+    agents[bestSwap.agent].model = bestSwap.candidate.model;
+    chains[bestSwap.agent] = dedupe([
+      bestSwap.candidate.model,
+      ...(chains[bestSwap.agent] ?? []),
+    ]).slice(0, 10);
+    provenance[bestSwap.agent] = {
+      winnerLayer: 'provider-fallback-policy',
+      winnerModel: bestSwap.candidate.model,
+    };
+  }
 }
 
 function chooseProviderRepresentative(
@@ -785,13 +1134,37 @@ export function buildDynamicModelPlan(
     config.selectedChutesSecondaryModel,
     config.selectedOpenCodePrimaryModel,
     config.selectedOpenCodeSecondaryModel,
+    ...Object.values(config.selectedChutesModelsByAgent ?? {}).map(
+      (assignment) => assignment.model,
+    ),
+    ...Object.values(config.selectedOpenCodeModelsByAgent ?? {}).map(
+      (assignment) => assignment.model,
+    ),
+    ...Object.values(config.selectedNanoGptModelsByAgent ?? {}).map(
+      (assignment) => assignment.model,
+    ),
   ].reduce((acc, modelID) => ensureSyntheticModel(acc, modelID), catalog);
 
   const enabledProviders = new Set(getEnabledProviders(config));
-  const providerCandidates = catalogWithSelectedModels.filter((m) =>
-    enabledProviders.has(m.providerID),
+  const providerUniverse = catalogWithSelectedModels.filter((m) => {
+    if (!enabledProviders.has(m.providerID)) return false;
+
+    if (m.providerID === 'chutes' && /qwen/i.test(m.model)) {
+      return false;
+    }
+
+    return true;
+  });
+  const engineVersion =
+    options?.scoringEngineVersion ?? config.scoringEngineVersion ?? 'v1';
+  const versionRecencyMap = getVersionRecencyMap(providerUniverse);
+
+  const providerCandidates = selectTopModelsPerProvider(
+    providerUniverse,
+    engineVersion,
+    externalSignals,
+    versionRecencyMap,
   );
-  const versionRecencyMap = getVersionRecencyMap(providerCandidates);
 
   if (providerCandidates.length === 0) {
     return null;
@@ -820,8 +1193,6 @@ export function buildDynamicModelPlan(
     }
   }
   const providerUsage = new Map<string, number>();
-  const engineVersion =
-    options?.scoringEngineVersion ?? config.scoringEngineVersion ?? 'v1';
   const rankCache = new Map<AgentName, DiscoveredModel[]>();
   const shadowDiffs: Record<
     string,
@@ -831,6 +1202,43 @@ export function buildDynamicModelPlan(
   const agents: Record<string, { model: string; variant?: string }> = {};
   const chains: Record<string, string[]> = {};
   const provenance: DynamicModelPlan['provenance'] = {};
+
+  const getSelectedChutesForAgent = (agent: AgentName): string | undefined => {
+    if (!config.hasChutes) return undefined;
+    const explicit = config.selectedChutesModelsByAgent?.[agent]?.model;
+    if (explicit) return explicit;
+    return agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
+      ? (config.selectedChutesSecondaryModel ??
+          config.selectedChutesPrimaryModel)
+      : config.selectedChutesPrimaryModel;
+  };
+
+  const getSelectedOpenCodeForAgent = (
+    agent: AgentName,
+  ): string | undefined => {
+    if (!config.useOpenCodeFreeModels) return undefined;
+    const explicit = config.selectedOpenCodeModelsByAgent?.[agent]?.model;
+    if (explicit) return explicit;
+    return agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
+      ? (config.selectedOpenCodeSecondaryModel ??
+          config.selectedOpenCodePrimaryModel)
+      : config.selectedOpenCodePrimaryModel;
+  };
+
+  const getSelectedNanoGptForAgent = (agent: AgentName): string | undefined => {
+    if (!config.hasNanoGpt) return undefined;
+    return config.selectedNanoGptModelsByAgent?.[agent]?.model;
+  };
+
+  const getPinnedModelForProvider = (
+    agent: AgentName,
+    providerID: string,
+  ): string | undefined => {
+    if (providerID === 'chutes') return getSelectedChutesForAgent(agent);
+    if (providerID === 'opencode') return getSelectedOpenCodeForAgent(agent);
+    if (providerID === 'nanogpt') return getSelectedNanoGptForAgent(agent);
+    return undefined;
+  };
 
   const getRankedModels = (agent: AgentName): DiscoveredModel[] => {
     const cached = rankCache.get(agent);
@@ -888,6 +1296,10 @@ export function buildDynamicModelPlan(
     const providerOrder = dedupe(ranked.map((m) => m.providerID));
     const perProviderBest = providerOrder.flatMap((providerID) => {
       const providerModels = ranked.filter((m) => m.providerID === providerID);
+      const pinned = getPinnedModelForProvider(agent, providerID);
+      if (pinned && providerModels.some((m) => m.model === pinned)) {
+        return [pinned];
+      }
       return getProviderBundle(
         providerModels,
         agent,
@@ -902,21 +1314,14 @@ export function buildDynamicModelPlan(
       model.startsWith('opencode/'),
     );
 
-    const selectedOpencode =
-      agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
-        ? (config.selectedOpenCodeSecondaryModel ??
-          config.selectedOpenCodePrimaryModel)
-        : config.selectedOpenCodePrimaryModel;
-
-    const selectedChutes =
-      agent === 'explorer' || agent === 'librarian' || agent === 'fixer'
-        ? (config.selectedChutesSecondaryModel ??
-          config.selectedChutesPrimaryModel)
-        : config.selectedChutesPrimaryModel;
+    const selectedOpencode = getSelectedOpenCodeForAgent(agent);
+    const selectedChutes = getSelectedChutesForAgent(agent);
+    const selectedNanoGpt = getSelectedNanoGptForAgent(agent);
 
     const chain = dedupe([
       primary.model,
       ...nonFreePerProviderBest,
+      selectedNanoGpt,
       selectedChutes,
       selectedOpencode,
       ...freePerProviderBest,
@@ -930,7 +1335,7 @@ export function buildDynamicModelPlan(
     const finalizedChain = finalizeChainWithTail(chain, deterministicFreeTail);
 
     const providerPolicyChain = dedupe([selectedChutes, selectedOpencode]);
-    const systemDefaultModel = selectedOpencode ?? 'opencode/big-pickle';
+    const systemDefaultModel = selectedOpencode ?? primary.model;
     const resolved = resolveAgentWithPrecedence({
       agentName: agent,
       dynamicRecommendation: finalizedChain,
@@ -938,12 +1343,54 @@ export function buildDynamicModelPlan(
       systemDefault: [systemDefaultModel],
     });
 
+    let finalModel = resolved.model;
+    let finalChain = resolved.chain;
+
+    const selectedChutesForAgent = getSelectedChutesForAgent(agent);
+    const selectedOpenCodeForAgent = getSelectedOpenCodeForAgent(agent);
+
+    const forceChutes =
+      finalModel.startsWith('chutes/') && Boolean(selectedChutesForAgent);
+    const forceOpenCode =
+      finalModel.startsWith('opencode/') && Boolean(selectedOpenCodeForAgent);
+
+    if (forceOpenCode && selectedOpenCodeForAgent) {
+      finalModel = selectedOpenCodeForAgent;
+      finalChain = dedupe([selectedOpenCodeForAgent, ...finalChain]);
+    }
+
+    if (forceChutes && selectedChutesForAgent) {
+      finalModel = selectedChutesForAgent;
+      finalChain = dedupe([selectedChutesForAgent, ...finalChain]);
+    }
+
+    const preferredModel = resolvePreferredModelForAgent({
+      agent,
+      preferences: config.preferredModelsByAgent,
+      candidates: ranked.map((entry) => entry.model),
+    });
+    const usedPreferredModel =
+      typeof preferredModel === 'string' && preferredModel !== finalModel;
+    if (preferredModel) {
+      finalModel = preferredModel;
+      finalChain = dedupe([preferredModel, ...finalChain]);
+    }
+
+    const wasForced = forceChutes || forceOpenCode;
+
     agents[agent] = {
-      model: resolved.model,
+      model: finalModel,
       variant: ROLE_VARIANT[agent],
     };
-    chains[agent] = resolved.chain;
-    provenance[agent] = resolved.provenance;
+    chains[agent] = finalChain;
+    provenance[agent] = {
+      winnerLayer: usedPreferredModel
+        ? 'pinned-model'
+        : wasForced
+          ? 'manual-user-plan'
+          : resolved.provenance.winnerLayer,
+      winnerModel: finalModel,
+    };
   }
 
   if (hasPaidProviderEnabled) {
@@ -963,9 +1410,10 @@ export function buildDynamicModelPlan(
         if (!currentModel) continue;
 
         const ranked = getRankedModels(agent);
-        const candidate = ranked.find(
-          (model) => model.providerID === providerID,
-        );
+        const pinned = getPinnedModelForProvider(agent, providerID);
+        const candidate =
+          ranked.find((model) => model.model === pinned) ??
+          ranked.find((model) => model.providerID === providerID);
         const current = ranked.find((model) => model.model === currentModel);
         if (!candidate || !current) continue;
 
@@ -1001,6 +1449,10 @@ export function buildDynamicModelPlan(
         bestSwap.candidateModel,
         ...(chains[bestSwap.agent] ?? []),
       ]).slice(0, 10);
+      provenance[bestSwap.agent] = {
+        winnerLayer: 'provider-fallback-policy',
+        winnerModel: bestSwap.candidateModel,
+      };
 
       providerUsage.set(providerID, (providerUsage.get(providerID) ?? 0) + 1);
       providerUsage.set(
@@ -1008,6 +1460,44 @@ export function buildDynamicModelPlan(
         Math.max(0, (providerUsage.get(existingProvider) ?? 1) - 1),
       );
     }
+  }
+
+  if (config.balanceProviderUsage && hasPaidProviderEnabled) {
+    rebalanceForSubscriptionMode(
+      agents,
+      chains,
+      provenance,
+      paidProviders,
+      getRankedModels,
+      getPinnedModelForProvider,
+      targetByProvider,
+      externalSignals,
+      versionRecencyMap,
+      engineVersion,
+    );
+  }
+
+  for (const agent of PRIMARY_ASSIGNMENT_ORDER) {
+    const current = agents[agent];
+    if (!current) continue;
+    if (provenance[agent]?.winnerLayer === 'manual-user-plan') continue;
+
+    const preferredModel = resolvePreferredModelForAgent({
+      agent,
+      preferences: config.preferredModelsByAgent,
+      candidates: getRankedModels(agent).map((entry) => entry.model),
+    });
+    if (!preferredModel || preferredModel === current.model) continue;
+
+    current.model = preferredModel;
+    chains[agent] = dedupe([preferredModel, ...(chains[agent] ?? [])]).slice(
+      0,
+      10,
+    );
+    provenance[agent] = {
+      winnerLayer: 'pinned-model',
+      winnerModel: preferredModel,
+    };
   }
 
   if (Object.keys(agents).length === 0) {
@@ -1019,7 +1509,8 @@ export function buildDynamicModelPlan(
     chains,
     provenance,
     scoring: {
-      engineVersionApplied: engineVersion === 'v2' ? 'v2' : 'v1',
+      engineVersionApplied:
+        engineVersion === 'v2' ? 'v2' : engineVersion === 'v3' ? 'v3' : 'v1',
       shadowCompared: engineVersion === 'v2-shadow',
       diffs: engineVersion === 'v2-shadow' ? shadowDiffs : undefined,
     },

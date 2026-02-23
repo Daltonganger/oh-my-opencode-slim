@@ -5,6 +5,7 @@ import { loadPluginConfig, type TmuxConfig } from './config';
 import { parseList } from './config/agent-mcps';
 import {
   createAutoUpdateCheckerHook,
+  createModelRefreshCheckerHook,
   createPhaseReminderHook,
   createPostReadNudgeHook,
 } from './hooks';
@@ -13,7 +14,6 @@ import {
   ast_grep_replace,
   ast_grep_search,
   createBackgroundTools,
-  createOmosPreferencesTools,
   grep,
   lsp_diagnostics,
   lsp_find_references,
@@ -52,7 +52,6 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     tmuxConfig,
     config,
   );
-  const omosPreferencesTools = createOmosPreferencesTools(ctx);
   const mcps = createBuiltinMcps(config.disabled_mcps);
 
   // Initialize TmuxSessionManager to handle OpenCode's built-in Task tool sessions
@@ -62,6 +61,12 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   const autoUpdateChecker = createAutoUpdateCheckerHook(ctx, {
     showStartupToast: true,
     autoUpdate: true,
+  });
+
+  const modelRefreshChecker = createModelRefreshCheckerHook(ctx, {
+    enabled: config.model_refresh?.enabled ?? true,
+    intervalHours: config.model_refresh?.interval_hours ?? 24,
+    showToast: config.model_refresh?.show_toast ?? false,
   });
 
   // Initialize phase reminder hook for workflow compliance
@@ -77,7 +82,6 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
 
     tool: {
       ...backgroundTools,
-      ...omosPreferencesTools,
       lsp_goto_definition,
       lsp_find_references,
       lsp_diagnostics,
@@ -157,6 +161,8 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       // Handle auto-update checking
       await autoUpdateChecker.event(input);
 
+      modelRefreshChecker.event(input);
+
       // Handle tmux pane spawning for OpenCode's Task tool sessions
       await tmuxSessionManager.onSessionCreated(
         input.event as {
@@ -180,6 +186,22 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
         input.event as {
           type: string;
           properties?: { sessionID?: string; status?: { type: string } };
+        },
+      );
+
+      // Handle session.deleted events for:
+      // 1. BackgroundTaskManager: task cleanup
+      // 2. TmuxSessionManager: pane cleanup
+      await backgroundManager.handleSessionDeleted(
+        input.event as {
+          type: string;
+          properties?: { info?: { id?: string }; sessionID?: string };
+        },
+      );
+      await tmuxSessionManager.onSessionDeleted(
+        input.event as {
+          type: string;
+          properties?: { sessionID?: string };
         },
       );
     },

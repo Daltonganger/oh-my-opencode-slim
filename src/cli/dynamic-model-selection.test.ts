@@ -1,7 +1,11 @@
 /// <reference types="bun-types" />
 
 import { describe, expect, test } from 'bun:test';
-import { buildDynamicModelPlan } from './dynamic-model-selection';
+import {
+  buildDynamicModelPlan,
+  filterCatalogToEnabledProviders,
+  rankModelsV1WithBreakdown,
+} from './dynamic-model-selection';
 import type { DiscoveredModel, InstallConfig } from './types';
 
 function m(
@@ -42,6 +46,7 @@ function baseInstallConfig(): InstallConfig {
     hasTmux: false,
     installSkills: false,
     installCustomSkills: false,
+    setupMode: 'quick',
   };
 }
 
@@ -113,5 +118,237 @@ describe('dynamic-model-selection', () => {
     expect(plan?.scoring?.engineVersionApplied).toBe('v1');
     expect(plan?.scoring?.shadowCompared).toBe(true);
     expect(plan?.scoring?.diffs?.oracle).toBeDefined();
+  });
+
+  test('balances provider usage when subscription mode is enabled', () => {
+    const plan = buildDynamicModelPlan(
+      [
+        m({ model: 'openai/gpt-5.3-codex', reasoning: true, toolcall: true }),
+        m({
+          model: 'openai/gpt-5.1-codex-mini',
+          reasoning: true,
+          toolcall: true,
+        }),
+        m({
+          model: 'zai-coding-plan/glm-4.7',
+          reasoning: true,
+          toolcall: true,
+        }),
+        m({
+          model: 'zai-coding-plan/glm-4.7-flash',
+          reasoning: true,
+          toolcall: true,
+        }),
+        m({
+          model: 'chutes/moonshotai/Kimi-K2.5-TEE',
+          reasoning: true,
+          toolcall: true,
+        }),
+        m({
+          model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+          reasoning: true,
+          toolcall: true,
+        }),
+      ],
+      {
+        ...baseInstallConfig(),
+        hasCopilot: false,
+        balanceProviderUsage: true,
+      },
+      undefined,
+      { scoringEngineVersion: 'v2' },
+    );
+
+    expect(plan).not.toBeNull();
+    const usage = Object.values(plan?.agents ?? {}).reduce(
+      (acc, assignment) => {
+        const provider = assignment.model.split('/')[0] ?? 'unknown';
+        acc[provider] = (acc[provider] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    expect(usage.openai).toBe(2);
+    expect(usage['zai-coding-plan']).toBe(2);
+    expect(usage.chutes).toBe(2);
+  });
+
+  test('matches external signals for multi-segment chutes ids in v1', () => {
+    const ranked = rankModelsV1WithBreakdown(
+      [m({ model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE' })],
+      'fixer',
+      {
+        'qwen/qwen3-coder-480b-a35b-instruct': {
+          source: 'artificial-analysis',
+          qualityScore: 95,
+          codingScore: 92,
+        },
+      },
+    );
+
+    expect(ranked[0]?.externalSignalBoost).toBeGreaterThan(0);
+  });
+
+  test('prefers chutes kimi/minimax over qwen3 in v1 role scoring', () => {
+    const catalog = [
+      m({
+        model: 'chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE',
+        reasoning: true,
+        toolcall: true,
+      }),
+      m({
+        model: 'chutes/moonshotai/Kimi-K2.5-TEE',
+        reasoning: true,
+        toolcall: true,
+      }),
+      m({
+        model: 'chutes/minimax-m2.1',
+        reasoning: true,
+        toolcall: true,
+      }),
+    ];
+
+    const fixer = rankModelsV1WithBreakdown(catalog, 'fixer');
+    const explorer = rankModelsV1WithBreakdown(catalog, 'explorer');
+
+    expect(fixer[0]?.model).not.toContain('Qwen3-Coder-480B');
+    expect(explorer[0]?.model).toContain('minimax-m2.1');
+  });
+
+  test('prefers Gemini 3 over older peers in v1 scoring', () => {
+    const catalog = [
+      m({
+        model: 'google/antigravity-gemini-3-pro',
+        reasoning: true,
+        toolcall: true,
+      }),
+      m({ model: 'openai/gpt-5.3-codex', reasoning: true, toolcall: true }),
+    ];
+
+    const oracle = rankModelsV1WithBreakdown(catalog, 'oracle');
+    const orchestrator = rankModelsV1WithBreakdown(catalog, 'orchestrator');
+    const designer = rankModelsV1WithBreakdown(catalog, 'designer');
+    const librarian = rankModelsV1WithBreakdown(catalog, 'librarian');
+
+    expect(oracle[0]?.model).toBe('google/antigravity-gemini-3-pro');
+    expect(orchestrator[0]?.model).toBe('google/antigravity-gemini-3-pro');
+    expect(designer[0]?.model).toBe('google/antigravity-gemini-3-pro');
+    expect(librarian[0]?.model).toBe('google/antigravity-gemini-3-pro');
+  });
+
+  test('filters provider catalog to explicit selection only', () => {
+    const catalog = [
+      m({ model: 'nanogpt/gpt-4o' }),
+      m({ model: 'openai/gpt-5.3-codex' }),
+      m({ model: 'google/gemini-2.5-flash' }),
+    ];
+
+    const filtered = filterCatalogToEnabledProviders(catalog, {
+      ...baseInstallConfig(),
+      hasOpenAI: false,
+      hasCopilot: false,
+      hasZaiPlan: false,
+      hasChutes: false,
+      hasAntigravity: false,
+      hasNanoGpt: true,
+      useOpenCodeFreeModels: false,
+    });
+
+    expect(filtered.map((model) => model.model)).toEqual(['nanogpt/gpt-4o']);
+  });
+
+  test('keeps dynamic assignments inside selected providers only', () => {
+    const plan = buildDynamicModelPlan(
+      [
+        m({ model: 'nanogpt/gpt-4o', reasoning: true, toolcall: true }),
+        m({ model: 'nanogpt/gpt-4o-mini', reasoning: true, toolcall: true }),
+        m({ model: 'openai/gpt-5.3-codex', reasoning: true, toolcall: true }),
+        m({
+          model: 'google/gemini-2.5-flash',
+          reasoning: true,
+          toolcall: true,
+        }),
+      ],
+      {
+        ...baseInstallConfig(),
+        hasOpenAI: false,
+        hasCopilot: false,
+        hasZaiPlan: false,
+        hasChutes: false,
+        hasAntigravity: false,
+        hasNanoGpt: true,
+        useOpenCodeFreeModels: false,
+      },
+    );
+
+    expect(plan).not.toBeNull();
+    for (const assignment of Object.values(plan?.agents ?? {})) {
+      expect(assignment.model.startsWith('nanogpt/')).toBe(true);
+    }
+  });
+
+  test('subscription-only policy uses NanoGPT subscription endpoint model list', () => {
+    const filtered = filterCatalogToEnabledProviders(
+      [
+        m({
+          model: 'nanogpt/qwen/qwen3.5-plus-thinking',
+          costInput: 0.4,
+          costOutput: 2.4,
+        }),
+        m({
+          model: 'nanogpt/qwen/qwen3-coder',
+          costInput: 1,
+          costOutput: 2,
+        }),
+      ],
+      {
+        ...baseInstallConfig(),
+        hasOpenAI: false,
+        hasCopilot: false,
+        hasZaiPlan: false,
+        hasChutes: false,
+        hasAntigravity: false,
+        hasNanoGpt: true,
+        useOpenCodeFreeModels: false,
+        nanoGptRoutingPolicy: 'subscription-only',
+        nanoGptSubscriptionModels: ['nanogpt/qwen/qwen3-coder'],
+      },
+    );
+
+    expect(filtered.map((model) => model.model)).toEqual([
+      'nanogpt/qwen/qwen3-coder',
+    ]);
+  });
+
+  test('applies per-agent preferred models when available', () => {
+    const plan = buildDynamicModelPlan(
+      [
+        m({ model: 'openai/gpt-5.3-codex', reasoning: true, toolcall: true }),
+        m({
+          model: 'openai/gpt-5.1-codex-mini',
+          reasoning: true,
+          toolcall: true,
+        }),
+        m({
+          model: 'chutes/MiniMaxAI/MiniMax-M2.5-TEE',
+          reasoning: true,
+          toolcall: true,
+        }),
+      ],
+      {
+        ...baseInstallConfig(),
+        hasCopilot: false,
+        hasZaiPlan: false,
+        hasKimi: false,
+        hasAntigravity: false,
+        preferredModelsByAgent: {
+          fixer: ['chutes/MiniMaxAI/MiniMax-M2.5-TEE'],
+        },
+      },
+    );
+
+    expect(plan?.agents.fixer?.model).toBe('chutes/MiniMaxAI/MiniMax-M2.5-TEE');
+    expect(plan?.provenance?.fixer?.winnerLayer).toBe('pinned-model');
   });
 });

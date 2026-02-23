@@ -16,6 +16,7 @@ function weightedFeatures(
     status: features.status * weights.status,
     context: features.context * weights.context,
     output: features.output * weights.output,
+    versionBonus: features.versionBonus * weights.versionBonus,
     reasoning: features.reasoning * weights.reasoning,
     toolcall: features.toolcall * weights.toolcall,
     attachment: features.attachment * weights.attachment,
@@ -31,6 +32,7 @@ function sumFeatures(features: FeatureVector): number {
     features.status +
     features.context +
     features.output +
+    features.versionBonus +
     features.reasoning +
     features.toolcall +
     features.attachment +
