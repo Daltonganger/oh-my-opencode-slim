@@ -13,6 +13,8 @@ export interface InstallArgs {
   skills?: BooleanArg;
   opencodeFree?: BooleanArg;
   opencodeFreeModel?: string;
+  aaKey?: string;
+  openrouterKey?: string;
 }
 
 export interface OpenCodeFreeModel {
@@ -53,6 +55,17 @@ export interface DynamicModelPlan {
   chains: Record<string, string[]>;
 }
 
+export interface ExternalModelSignal {
+  qualityScore?: number;
+  codingScore?: number;
+  latencySeconds?: number;
+  inputPricePer1M?: number;
+  outputPricePer1M?: number;
+  source: 'artificial-analysis' | 'openrouter' | 'merged';
+}
+
+export type ExternalSignalMap = Record<string, ExternalModelSignal>;
+
 export interface OpenCodeConfig {
   plugin?: string[];
   provider?: Record<string, unknown>;
@@ -78,6 +91,8 @@ export interface InstallConfig {
   selectedChutesSecondaryModel?: string;
   availableChutesFreeModels?: OpenCodeFreeModel[];
   dynamicModelPlan?: DynamicModelPlan;
+  artificialAnalysisApiKey?: string;
+  openRouterApiKey?: string;
   hasTmux: boolean;
   installSkills: boolean;
   installCustomSkills: boolean;
